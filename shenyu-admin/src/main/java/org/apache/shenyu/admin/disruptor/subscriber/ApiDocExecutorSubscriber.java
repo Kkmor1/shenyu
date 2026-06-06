@@ -46,9 +46,7 @@ public class ApiDocExecutorSubscriber implements ExecutorTypeSubscriber<ApiDocRe
     public void executor(final Collection<ApiDocRegisterDTO> dataList) {
         dataList.forEach(apiDoc -> Optional.ofNullable(this.shenyuClientRegisterService.get(apiDoc.getRpcType()))
                 .ifPresent(shenyuClientRegisterService -> {
-                    synchronized (shenyuClientRegisterService) {
-                        shenyuClientRegisterService.registerApiDoc(apiDoc);
-                    }
+                    shenyuClientRegisterService.registerApiDoc(apiDoc);
                 }));
     }
 }
