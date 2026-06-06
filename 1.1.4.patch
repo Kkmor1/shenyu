@@ -1,0 +1,41 @@
+diff --git a/shenyu-common/src/main/java/org/apache/shenyu/common/enums/PluginEnum.java b/shenyu-common/src/main/java/org/apache/shenyu/common/enums/PluginEnum.java
+index 8501238fa..420242d68 100644
+--- a/shenyu-common/src/main/java/org/apache/shenyu/common/enums/PluginEnum.java
++++ b/shenyu-common/src/main/java/org/apache/shenyu/common/enums/PluginEnum.java
+@@ -295,7 +295,12 @@ public enum PluginEnum {
+     /**
+      * Basic-auth plugin enum.
+      */
+-    BASIC_AUTH(150, 0, "basicAuth");
++    BASIC_AUTH(150, 0, "basicAuth"),
++    
++    /**
++     * Header blacklist plugin enum.
++     */
++    HEADER_BLACKLIST(10, 0, "headerBlacklist");
+     
+     /**
+      * When the application starts, the plugin is cached and we can obtained by name.
+diff --git a/shenyu-plugin/pom.xml b/shenyu-plugin/pom.xml
+index 8343df810..a57319a3c 100644
+--- a/shenyu-plugin/pom.xml
++++ b/shenyu-plugin/pom.xml
+@@ -51,6 +51,7 @@
+         <module>shenyu-plugin-fault-tolerance</module>
+         <module>shenyu-plugin-ai</module>
+         <module>shenyu-plugin-mcp-server</module>
++        <module>shenyu-plugin-header-blacklist</module>
+     </modules>
+ 
+     <dependencies>
+diff --git a/shenyu-spring-boot-starter/shenyu-spring-boot-starter-plugin/pom.xml b/shenyu-spring-boot-starter/shenyu-spring-boot-starter-plugin/pom.xml
+index 03f59e049..346cb708c 100644
+--- a/shenyu-spring-boot-starter/shenyu-spring-boot-starter-plugin/pom.xml
++++ b/shenyu-spring-boot-starter/shenyu-spring-boot-starter-plugin/pom.xml
+@@ -78,5 +78,6 @@
+         <module>shenyu-spring-boot-starter-plugin-ai-request-transformer</module>
+         <module>shenyu-spring-boot-starter-plugin-ai-response-transformer</module>
+         <module>shenyu-spring-boot-starter-plugin-mcp-server</module>
++        <module>shenyu-spring-boot-starter-plugin-header-blacklist</module>
+     </modules>
+ </project>

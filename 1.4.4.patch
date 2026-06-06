@@ -1,0 +1,205 @@
+diff --git a/shenyu-common/src/main/java/org/apache/shenyu/common/dto/convert/rule/RateLimiterHandle.java b/shenyu-common/src/main/java/org/apache/shenyu/common/dto/convert/rule/RateLimiterHandle.java
+index 1a40c1184..c48715196 100644
+--- a/shenyu-common/src/main/java/org/apache/shenyu/common/dto/convert/rule/RateLimiterHandle.java
++++ b/shenyu-common/src/main/java/org/apache/shenyu/common/dto/convert/rule/RateLimiterHandle.java
+@@ -53,6 +53,21 @@ public class RateLimiterHandle {
+      * key resolver name.
+      */
+     private String keyResolverName;
++
++    /**
++     * fallback to local when redis unavailable.
++     */
++    private boolean fallbackToLocal = false;
++
++    /**
++     * local rate.
++     */
++    private double localRate = 1.0;
++
++    /**
++     * local burst.
++     */
++    private double localBurst = 100.0;
+     
+     /**
+      * New default instance rate limiter handle.
+@@ -66,6 +81,9 @@ public class RateLimiterHandle {
+         rateLimiterHandle.setBurstCapacity(100.0);
+         rateLimiterHandle.setRequestCount(1.0);
+         rateLimiterHandle.setLoged(false);
++        rateLimiterHandle.setFallbackToLocal(false);
++        rateLimiterHandle.setLocalRate(1.0);
++        rateLimiterHandle.setLocalBurst(100.0);
+         return rateLimiterHandle;
+     }
+     
+@@ -177,6 +195,30 @@ public class RateLimiterHandle {
+         this.keyResolverName = keyResolverName;
+     }
+ 
++    public boolean isFallbackToLocal() {
++        return fallbackToLocal;
++    }
++
++    public void setFallbackToLocal(final boolean fallbackToLocal) {
++        this.fallbackToLocal = fallbackToLocal;
++    }
++
++    public double getLocalRate() {
++        return localRate;
++    }
++
++    public void setLocalRate(final double localRate) {
++        this.localRate = localRate;
++    }
++
++    public double getLocalBurst() {
++        return localBurst;
++    }
++
++    public void setLocalBurst(final double localBurst) {
++        this.localBurst = localBurst;
++    }
++
+     @Override
+     public boolean equals(final Object o) {
+         if (this == o) {
+@@ -188,12 +230,14 @@ public class RateLimiterHandle {
+         RateLimiterHandle that = (RateLimiterHandle) o;
+         return Double.compare(that.replenishRate, replenishRate) == 0 && Double.compare(that.burstCapacity, burstCapacity) == 0
+                 && Double.compare(that.requestCount, requestCount) == 0 && loged == that.loged
++                && fallbackToLocal == that.fallbackToLocal
++                && Double.compare(that.localRate, localRate) == 0 && Double.compare(that.localBurst, localBurst) == 0
+                 && Objects.equals(algorithmName, that.algorithmName) && Objects.equals(keyResolverName, that.keyResolverName);
+     }
+ 
+     @Override
+     public int hashCode() {
+-        return Objects.hash(algorithmName, replenishRate, burstCapacity, requestCount, loged, keyResolverName);
++        return Objects.hash(algorithmName, replenishRate, burstCapacity, requestCount, loged, keyResolverName, fallbackToLocal, localRate, localBurst);
+     }
+ 
+     @Override
+@@ -213,6 +257,12 @@ public class RateLimiterHandle {
+                 + ", keyResolverName='"
+                 + keyResolverName
+                 + '\''
++                + ", fallbackToLocal="
++                + fallbackToLocal
++                + ", localRate="
++                + localRate
++                + ", localBurst="
++                + localBurst
+                 + '}';
+     }
+ }
+diff --git a/shenyu-plugin/shenyu-plugin-fault-tolerance/shenyu-plugin-ratelimiter/src/main/java/org/apache/shenyu/plugin/ratelimiter/executor/RedisRateLimiter.java b/shenyu-plugin/shenyu-plugin-fault-tolerance/shenyu-plugin-ratelimiter/src/main/java/org/apache/shenyu/plugin/ratelimiter/executor/RedisRateLimiter.java
+index c55187f6d..43fa284b2 100644
+--- a/shenyu-plugin/shenyu-plugin-fault-tolerance/shenyu-plugin-ratelimiter/src/main/java/org/apache/shenyu/plugin/ratelimiter/executor/RedisRateLimiter.java
++++ b/shenyu-plugin/shenyu-plugin-fault-tolerance/shenyu-plugin-ratelimiter/src/main/java/org/apache/shenyu/plugin/ratelimiter/executor/RedisRateLimiter.java
+@@ -43,6 +43,8 @@ public class RedisRateLimiter {
+ 
+     private static final Logger LOG = LoggerFactory.getLogger(RedisRateLimiter.class);
+ 
++    private final LocalTokenBucketRateLimiter localRateLimiter = new LocalTokenBucketRateLimiter();
++
+     /**
+      * Verify using different current limiting algorithm scripts.
+      *
+@@ -59,12 +61,24 @@ public class RedisRateLimiter {
+         RedisScript<?> script = rateLimiterAlgorithm.getScript();
+         List<String> keys = rateLimiterAlgorithm.getKeys(id);
+         List<String> scriptArgs = Stream.of(replenishRate, burstCapacity, Instant.now().getEpochSecond(), requestCount).map(String::valueOf).collect(Collectors.toList());
++        
+         Flux<List<Long>> resultFlux = Singleton.INST.get(ReactiveRedisTemplate.class).execute(script, keys, scriptArgs);
+-        return resultFlux.onErrorResume(throwable -> Flux.just(Arrays.asList(1L, -1L)))
++        
++        return resultFlux
++                .onErrorResume(throwable -> {
++                    if (limiterHandle.isFallbackToLocal()) {
++                        LOG.warn("Redis unavailable, fallback to local rate limiter. id: {}, error: {}", id, throwable.getMessage());
++                        boolean allowed = localRateLimiter.isAllowed(id, limiterHandle.getLocalRate(), limiterHandle.getLocalBurst(), requestCount);
++                        return Flux.just(Arrays.asList(allowed ? 1L : 0L, -1L));
++                    }
++                    LOG.error("Redis unavailable and fallback disabled. id: {}, error: {}", id, throwable.getMessage());
++                    return Flux.just(Arrays.asList(0L, -1L));
++                })
+                 .reduce(new ArrayList<Long>(), (longs, l) -> {
+                     longs.addAll(l);
+                     return longs;
+-                }).map(results -> {
++                })
++                .map(results -> {
+                     boolean allowed = ((Number) results.get(0)).longValue() == 1L;
+                     long tokensLeft = ((Number) results.get(1)).longValue();
+                     return new RateLimiterResponse(allowed, tokensLeft, keys);
+diff --git a/shenyu-plugin/shenyu-plugin-fault-tolerance/shenyu-plugin-ratelimiter/src/test/java/org/apache/shenyu/plugin/ratelimiter/executor/RedisRateLimiterTest.java b/shenyu-plugin/shenyu-plugin-fault-tolerance/shenyu-plugin-ratelimiter/src/test/java/org/apache/shenyu/plugin/ratelimiter/executor/RedisRateLimiterTest.java
+index 5ad9345dc..cf5afb56c 100644
+--- a/shenyu-plugin/shenyu-plugin-fault-tolerance/shenyu-plugin-ratelimiter/src/test/java/org/apache/shenyu/plugin/ratelimiter/executor/RedisRateLimiterTest.java
++++ b/shenyu-plugin/shenyu-plugin-fault-tolerance/shenyu-plugin-ratelimiter/src/test/java/org/apache/shenyu/plugin/ratelimiter/executor/RedisRateLimiterTest.java
+@@ -163,6 +163,64 @@ public final class RedisRateLimiterTest {
+         }).verifyComplete();
+     }
+ 
++    /**
++     * redisRateLimiter.isAllowed with fallback enabled and redis unavailable test.
++     */
++    @Test
++    public void fallbackToLocalWhenRedisUnavailableTest() {
++        isAllowedPreInit(0, 0, true);
++        rateLimiterHandle.setAlgorithmName("tokenBucket");
++        rateLimiterHandle.setFallbackToLocal(true);
++        rateLimiterHandle.setLocalRate(10.0);
++        rateLimiterHandle.setLocalBurst(100.0);
++        Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
++        StepVerifier.create(responseMono).assertNext(r -> {
++            assertEquals(-1, r.getTokensRemaining());
++            assertTrue(r.isAllowed());
++        }).verifyComplete();
++    }
++
++    /**
++     * redisRateLimiter.isAllowed with fallback disabled and redis unavailable test.
++     */
++    @Test
++    public void notFallbackWhenRedisUnavailableTest() {
++        isAllowedPreInit(0, 0, true);
++        rateLimiterHandle.setAlgorithmName("tokenBucket");
++        rateLimiterHandle.setFallbackToLocal(false);
++        Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
++        StepVerifier.create(responseMono).assertNext(r -> {
++            assertEquals(-1, r.getTokensRemaining());
++            assertFalse(r.isAllowed());
++        }).verifyComplete();
++    }
++
++    /**
++     * redisRateLimiter.isAllowed test redis recovery after failure.
++     */
++    @Test
++    public void redisRecoveryTest() {
++        // First request: redis unavailable, use fallback
++        isAllowedPreInit(0, 0, true);
++        rateLimiterHandle.setAlgorithmName("tokenBucket");
++        rateLimiterHandle.setFallbackToLocal(true);
++        rateLimiterHandle.setLocalRate(10.0);
++        rateLimiterHandle.setLocalBurst(100.0);
++        Mono<RateLimiterResponse> firstResponseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
++        StepVerifier.create(firstResponseMono).assertNext(r -> {
++            assertEquals(-1, r.getTokensRemaining());
++            assertTrue(r.isAllowed());
++        }).verifyComplete();
++
++        // Second request: redis is back
++        isAllowedPreInit(1L, 20L, false);
++        Mono<RateLimiterResponse> secondResponseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
++        StepVerifier.create(secondResponseMono).assertNext(r -> {
++            assertEquals(20L, r.getTokensRemaining());
++            assertTrue(r.isAllowed());
++        }).verifyComplete();
++    }
++
+     /**
+      * redisRateLimiter.isAllowed test pre init.
+      *

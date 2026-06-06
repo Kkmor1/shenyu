@@ -1,0 +1,45 @@
+diff --git a/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/ApiDocExecutorSubscriber.java b/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/ApiDocExecutorSubscriber.java
+index b14823a45..3787a9002 100644
+--- a/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/ApiDocExecutorSubscriber.java
++++ b/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/ApiDocExecutorSubscriber.java
+@@ -46,9 +46,7 @@ public class ApiDocExecutorSubscriber implements ExecutorTypeSubscriber<ApiDocRe
+     public void executor(final Collection<ApiDocRegisterDTO> dataList) {
+         dataList.forEach(apiDoc -> Optional.ofNullable(this.shenyuClientRegisterService.get(apiDoc.getRpcType()))
+                 .ifPresent(shenyuClientRegisterService -> {
+-                    synchronized (shenyuClientRegisterService) {
+-                        shenyuClientRegisterService.registerApiDoc(apiDoc);
+-                    }
++                    shenyuClientRegisterService.registerApiDoc(apiDoc);
+                 }));
+     }
+ }
+diff --git a/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/McpToolsRegisterExecutorSubscriber.java b/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/McpToolsRegisterExecutorSubscriber.java
+index c8723b4da..cf9622932 100644
+--- a/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/McpToolsRegisterExecutorSubscriber.java
++++ b/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/McpToolsRegisterExecutorSubscriber.java
+@@ -45,9 +45,7 @@ public class McpToolsRegisterExecutorSubscriber implements ExecutorTypeSubscribe
+                 (ShenyuClientRegisterMcpServiceImpl) shenyuClientRegisterService.get(RpcTypeEnum.MCP.getName());
+ 
+         mcpToolsRegisterDTOList.forEach(dto -> {
+-            synchronized (shenyuClientRegisterService) {
+-                shenyuClientRegisterMcpService.registerMcpTools(dto);
+-            }
++            shenyuClientRegisterMcpService.registerMcpTools(dto);
+         });
+     }
+ 
+diff --git a/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/MetadataExecutorSubscriber.java b/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/MetadataExecutorSubscriber.java
+index be6ef4ee1..7135a8a9e 100644
+--- a/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/MetadataExecutorSubscriber.java
++++ b/shenyu-admin/src/main/java/org/apache/shenyu/admin/disruptor/subscriber/MetadataExecutorSubscriber.java
+@@ -46,9 +46,7 @@ public class MetadataExecutorSubscriber implements ExecutorTypeSubscriber<MetaDa
+     public void executor(final Collection<MetaDataRegisterDTO> metaDataRegisterDTOList) {
+         metaDataRegisterDTOList.forEach(meta -> Optional.ofNullable(this.shenyuClientRegisterService.get(meta.getRpcType()))
+                 .ifPresent(shenyuClientRegisterService -> {
+-                    synchronized (shenyuClientRegisterService) {
+-                        shenyuClientRegisterService.register(meta);
+-                    }
++                    shenyuClientRegisterService.register(meta);
+                 }));
+     }
+ }
