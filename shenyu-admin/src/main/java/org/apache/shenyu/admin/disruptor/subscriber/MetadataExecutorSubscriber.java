@@ -24,7 +24,12 @@ import org.apache.shenyu.register.common.type.DataType;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The type Metadata executor subscriber.
@@ -32,6 +37,8 @@ import java.util.Optional;
 public class MetadataExecutorSubscriber implements ExecutorTypeSubscriber<MetaDataRegisterDTO> {
 
     private final Map<String, ShenyuClientRegisterService> shenyuClientRegisterService;
+
+    private final Map<ShenyuClientRegisterService, MetadataRegisterSerialExecutor> serialExecutors = new ConcurrentHashMap<>();
 
     public MetadataExecutorSubscriber(final Map<String, ShenyuClientRegisterService> shenyuClientRegisterService) {
         this.shenyuClientRegisterService = shenyuClientRegisterService;
@@ -44,11 +51,39 @@ public class MetadataExecutorSubscriber implements ExecutorTypeSubscriber<MetaDa
 
     @Override
     public void executor(final Collection<MetaDataRegisterDTO> metaDataRegisterDTOList) {
-        metaDataRegisterDTOList.forEach(meta -> Optional.ofNullable(this.shenyuClientRegisterService.get(meta.getRpcType()))
-                .ifPresent(shenyuClientRegisterService -> {
-                    synchronized (shenyuClientRegisterService) {
-                        shenyuClientRegisterService.register(meta);
+        metaDataRegisterDTOList.stream()
+                .filter(Objects::nonNull)
+                .forEach(meta -> Optional.ofNullable(this.shenyuClientRegisterService.get(meta.getRpcType()))
+                        .ifPresent(shenyuClientRegisterService -> serialExecutors
+                                .computeIfAbsent(shenyuClientRegisterService, key -> new MetadataRegisterSerialExecutor())
+                                .offer(meta, shenyuClientRegisterService)));
+    }
+
+    private static final class MetadataRegisterSerialExecutor {
+
+        private final Queue<MetaDataRegisterDTO> queue = new ConcurrentLinkedQueue<>();
+
+        private final AtomicBoolean draining = new AtomicBoolean(false);
+
+        private void offer(final MetaDataRegisterDTO metaDataRegisterDTO, final ShenyuClientRegisterService registerService) {
+            queue.offer(metaDataRegisterDTO);
+            drain(registerService);
+        }
+
+        private void drain(final ShenyuClientRegisterService registerService) {
+            if (!draining.compareAndSet(false, true)) {
+                return;
+            }
+            do {
+                try {
+                    MetaDataRegisterDTO current;
+                    while ((current = queue.poll()) != null) {
+                        registerService.register(current);
                     }
-                }));
+                } finally {
+                    draining.set(false);
+                }
+            } while (!queue.isEmpty() && draining.compareAndSet(false, true));
+        }
     }
 }
