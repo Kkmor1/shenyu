@@ -70,17 +70,23 @@ public class RegisterClientServerDisruptorPublisher implements ShenyuClientServe
         providerManage.startup();
     }
     
+    /**
+     * publish.
+     *
+     * @param data data
+     */
     @Override
     public void publish(final DataTypeParent data) {
         DisruptorProvider<Collection<DataTypeParent>> provider = providerManage.getProvider();
-        provider.onData(Collections.singleton(data));
+        if (!provider.tryOnData(Collections.singleton(data))) {
+            provider.onData(Collections.singleton(data));
+        }
     }
-    
+
     @Override
     public void publish(final Collection<? extends DataTypeParent> dataList) {
         DisruptorProvider<Collection<DataTypeParent>> provider = providerManage.getProvider();
         provider.onData(dataList.stream().map(DataTypeParent.class::cast).collect(Collectors.toList()));
-        
     }
     
     @Override

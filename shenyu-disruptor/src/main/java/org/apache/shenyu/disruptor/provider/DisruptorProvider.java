@@ -89,6 +89,24 @@ public class DisruptorProvider<T> {
             logger.error("ex", ex);
         }
     }
+
+    /**
+     * Try to send a data without blocking.
+     *
+     * @param data the data
+     * @return true if the data was published, false if the ring buffer is full
+     */
+    public boolean tryOnData(final T data) {
+        if (isOrderly) {
+            throw new IllegalArgumentException("The current provider is of orderly type. Please use onOrderlyData() method.");
+        }
+        try {
+            return ringBuffer.tryPublishEvent(translatorOneArg, data);
+        } catch (Exception ex) {
+            logger.error("ex", ex);
+            return false;
+        }
+    }
     
     /**
      * On orderly data.

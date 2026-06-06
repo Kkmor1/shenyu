@@ -45,10 +45,6 @@ public class MetadataExecutorSubscriber implements ExecutorTypeSubscriber<MetaDa
     @Override
     public void executor(final Collection<MetaDataRegisterDTO> metaDataRegisterDTOList) {
         metaDataRegisterDTOList.forEach(meta -> Optional.ofNullable(this.shenyuClientRegisterService.get(meta.getRpcType()))
-                .ifPresent(shenyuClientRegisterService -> {
-                    synchronized (shenyuClientRegisterService) {
-                        shenyuClientRegisterService.register(meta);
-                    }
-                }));
+                .ifPresent(shenyuClientRegisterService -> shenyuClientRegisterService.register(meta)));
     }
 }
