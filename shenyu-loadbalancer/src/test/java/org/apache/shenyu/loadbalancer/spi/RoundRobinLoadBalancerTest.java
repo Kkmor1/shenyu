@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The type Load balance test.
  */
-public final class RoundRobinLoadBalanceTest {
+public final class RoundRobinLoadBalancerTest {
 
     private static final int SELECTION_ITERATIONS = 30;
 
