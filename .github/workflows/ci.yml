@@ -22,7 +22,38 @@ on:
       - master
 
 jobs:
+  check-spring-boot-version:
+    name: check-spring-boot-version
+    if: (github.repository == 'apache/shenyu')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Check Spring Boot Version Consistency
+        shell: bash
+        run: |
+          # Extract spring-boot.version from root pom.xml
+          ROOT_VERSION=$(grep -oP '<spring-boot.version>\K[^<]+' pom.xml)
+          
+          # Extract spring-boot-starter-parent version from shenyu-examples/pom.xml
+          EXAMPLES_VERSION=$(grep -oP '<artifactId>spring-boot-starter-parent</artifactId>\s*<version>\K[^<]+' shenyu-examples/pom.xml)
+          
+          echo "Root Spring Boot version: $ROOT_VERSION"
+          echo "Shenyu-examples Spring Boot version: $EXAMPLES_VERSION"
+          
+          if [ "$ROOT_VERSION" != "$EXAMPLES_VERSION" ]; then
+            echo "❌ Error: Spring Boot versions are inconsistent!"
+            echo "Root pom.xml: $ROOT_VERSION"
+            echo "Shenyu-examples/pom.xml: $EXAMPLES_VERSION"
+            exit 1
+          else
+            echo "✅ Spring Boot versions are consistent!"
+          fi
+
   build:
+    needs: check-spring-boot-version
     strategy:
       matrix:
         java: [17]
@@ -164,9 +195,11 @@ jobs:
     name: build
     if: (github.repository == 'apache/shenyu') && always()
     needs:
+      - check-spring-boot-version
       - build
     runs-on: ubuntu-latest
     steps:
       - name: checking job status
         run: |
+          [[ "${{ needs.check-spring-boot-version.result }}" == "success" ]] || exit -1
           [[ "${{ needs.build.result }}" == "success" ]] || exit -1
