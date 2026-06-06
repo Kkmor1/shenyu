@@ -44,11 +44,7 @@ public class McpToolsRegisterExecutorSubscriber implements ExecutorTypeSubscribe
         ShenyuClientRegisterMcpServiceImpl shenyuClientRegisterMcpService =
                 (ShenyuClientRegisterMcpServiceImpl) shenyuClientRegisterService.get(RpcTypeEnum.MCP.getName());
 
-        mcpToolsRegisterDTOList.forEach(dto -> {
-            synchronized (shenyuClientRegisterService) {
-                shenyuClientRegisterMcpService.registerMcpTools(dto);
-            }
-        });
+        mcpToolsRegisterDTOList.forEach(shenyuClientRegisterMcpService::registerMcpTools);
     }
 
     @Override

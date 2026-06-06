@@ -67,20 +67,51 @@ public class RegisterClientServerDisruptorPublisher implements ShenyuClientServe
         factory.addSubscribers(new DiscoveryConfigRegisterExecutorSubscriber(discoveryService));
         factory.addSubscribers(new McpToolsRegisterExecutorSubscriber(shenyuClientRegisterService));
         providerManage = new DisruptorProviderManage<>(factory);
-        providerManage.startup();
+        providerManage.startup(true);
     }
     
     @Override
     public void publish(final DataTypeParent data) {
         DisruptorProvider<Collection<DataTypeParent>> provider = providerManage.getProvider();
-        provider.onData(Collections.singleton(data));
+        provider.onOrderlyData(Collections.singleton(data), getHash(data));
     }
     
     @Override
     public void publish(final Collection<? extends DataTypeParent> dataList) {
         DisruptorProvider<Collection<DataTypeParent>> provider = providerManage.getProvider();
-        provider.onData(dataList.stream().map(DataTypeParent.class::cast).collect(Collectors.toList()));
-        
+        if (dataList != null && !dataList.isEmpty()) {
+            provider.onOrderlyData(dataList.stream().map(DataTypeParent.class::cast).collect(Collectors.toList()), getHash(dataList.iterator().next()));
+        }
+    }
+    
+    private String getHash(final DataTypeParent data) {
+        if (data instanceof org.apache.shenyu.register.common.dto.URIRegisterDTO) {
+            org.apache.shenyu.register.common.dto.URIRegisterDTO uriRegisterDTO = (org.apache.shenyu.register.common.dto.URIRegisterDTO) data;
+            if (org.apache.commons.lang3.StringUtils.isNotEmpty(uriRegisterDTO.getContextPath())) {
+                return uriRegisterDTO.getContextPath();
+            }
+            if (org.apache.commons.lang3.StringUtils.isNotEmpty(uriRegisterDTO.getAppName())) {
+                return uriRegisterDTO.getAppName();
+            }
+            return uriRegisterDTO.getRpcType() != null ? uriRegisterDTO.getRpcType() : "uri";
+        } else if (data instanceof org.apache.shenyu.register.common.dto.MetaDataRegisterDTO) {
+            org.apache.shenyu.register.common.dto.MetaDataRegisterDTO metaDataRegisterDTO = (org.apache.shenyu.register.common.dto.MetaDataRegisterDTO) data;
+            if (org.apache.commons.lang3.StringUtils.isNotEmpty(metaDataRegisterDTO.getContextPath())) {
+                return metaDataRegisterDTO.getContextPath();
+            }
+            if (org.apache.commons.lang3.StringUtils.isNotEmpty(metaDataRegisterDTO.getAppName())) {
+                return metaDataRegisterDTO.getAppName();
+            }
+            return metaDataRegisterDTO.getRpcType() != null ? metaDataRegisterDTO.getRpcType() : "meta";
+        } else if (data instanceof org.apache.shenyu.register.common.dto.ApiDocRegisterDTO) {
+            org.apache.shenyu.register.common.dto.ApiDocRegisterDTO apiDocRegisterDTO = (org.apache.shenyu.register.common.dto.ApiDocRegisterDTO) data;
+            return org.apache.commons.lang3.StringUtils.isNotEmpty(apiDocRegisterDTO.getContextPath()) ? apiDocRegisterDTO.getContextPath() : "apiDoc";
+        } else if (data instanceof org.apache.shenyu.register.common.dto.DiscoveryConfigRegisterDTO) {
+            return ((org.apache.shenyu.register.common.dto.DiscoveryConfigRegisterDTO) data).getPluginName() != null ? ((org.apache.shenyu.register.common.dto.DiscoveryConfigRegisterDTO) data).getPluginName() : "discovery";
+        } else if (data instanceof org.apache.shenyu.register.common.dto.McpToolsRegisterDTO) {
+            return "mcp";
+        }
+        return "default";
     }
     
     @Override

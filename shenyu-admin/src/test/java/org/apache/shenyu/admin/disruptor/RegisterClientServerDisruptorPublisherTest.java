@@ -46,6 +46,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * Test case for {@link RegisterClientServerDisruptorPublisher}.
  */
@@ -119,7 +125,7 @@ class RegisterClientServerDisruptorPublisherTest {
 
         publisher.publish(uriDTO);
 
-        verify(mockProvider, times(1)).onData(any());
+        verify(mockProvider, times(1)).onOrderlyData(any(), any());
     }
 
     @Test
@@ -141,7 +147,7 @@ class RegisterClientServerDisruptorPublisherTest {
 
         publisher.publish(dataList);
 
-        verify(mockProvider, times(1)).onData(any());
+        verify(mockProvider, times(1)).onOrderlyData(any(), any());
     }
 
     @Test
@@ -155,11 +161,12 @@ class RegisterClientServerDisruptorPublisherTest {
                 .ruleName("testRule")
                 .rpcType("http")
                 .namespaceId("default")
+                .contextPath("/test/path")
                 .build();
 
         publisher.publish(metaDTO);
 
-        verify(mockProvider, times(1)).onData(any());
+        verify(mockProvider, times(1)).onOrderlyData(any(), any());
     }
 
     @Test
@@ -180,7 +187,40 @@ class RegisterClientServerDisruptorPublisherTest {
         List<DataTypeParent> emptyList = new ArrayList<>();
         publisher.publish(emptyList);
 
-        verify(mockProvider, times(1)).onData(any());
+        verify(mockProvider, times(0)).onOrderlyData(any(), any());
+    }
+
+    @Test
+    void testConcurrentPublishNoDeadlock() throws Exception {
+        publisher.start(serviceMap, discoveryService);
+        // Do NOT mock providerManage, use the real one to test Disruptor
+        int threadCount = 1000;
+        CountDownLatch latch = new CountDownLatch(threadCount);
+        ExecutorService executorService = Executors.newFixedThreadPool(100);
+        
+        for (int i = 0; i < threadCount; i++) {
+            final int index = i;
+            executorService.submit(() -> {
+                try {
+                    MetaDataRegisterDTO metaDTO = MetaDataRegisterDTO.builder()
+                            .appName("testApp" + index)
+                            .path("/test/path/" + index)
+                            .ruleName("testRule" + index)
+                            .rpcType("http")
+                            .namespaceId("default")
+                            .contextPath("/testApp" + index)
+                            .build();
+                    publisher.publish(metaDTO);
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+        
+        boolean completed = latch.await(10, TimeUnit.SECONDS);
+        executorService.shutdown();
+        
+        org.junit.jupiter.api.Assertions.assertTrue(completed, "Concurrent publish should complete without deadlock");
     }
 
     private DisruptorProviderManage<Collection<DataTypeParent>> getProviderManage() {
