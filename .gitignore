@@ -33,7 +33,6 @@ logs/
 *.doc
 *.cache
 *.diff
-*.patch
 *.tmp
 
 # system ignore
