@@ -1,0 +1,1 @@
+header-blacklist=org.apache.shenyu.plugin.header.blacklist.handler.HeaderBlacklistPluginDataHandler
