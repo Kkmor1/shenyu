@@ -17,25 +17,14 @@
   -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.apache.shenyu</groupId>
-        <artifactId>shenyu-plugin</artifactId>
+        <artifactId>shenyu-plugin-security</artifactId>
         <version>2.7.1-SNAPSHOT</version>
     </parent>
-    <artifactId>shenyu-plugin-security</artifactId>
-    <packaging>pom</packaging>
+    <modelVersion>4.0.0</modelVersion>
 
-    <modules>
-        <module>shenyu-plugin-casdoor</module>
-        <module>shenyu-plugin-jwt</module>
-        <module>shenyu-plugin-key-auth</module>
-        <module>shenyu-plugin-oauth2</module>
-        <module>shenyu-plugin-sign</module>
-        <module>shenyu-plugin-cryptor</module>
-        <module>shenyu-plugin-basic-auth</module>
-        <module>shenyu-plugin-header-blacklist</module>
-    </modules>
+    <artifactId>shenyu-plugin-header-blacklist</artifactId>
 
     <dependencies>
         <dependency>
@@ -43,5 +32,16 @@
             <artifactId>shenyu-plugin-base</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
 </project>
