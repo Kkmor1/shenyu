@@ -1,0 +1,24 @@
+diff --git a/shenyu-plugin/pom.xml b/shenyu-plugin/pom.xml
+index 8343df810..139a55a39 100644
+--- a/shenyu-plugin/pom.xml
++++ b/shenyu-plugin/pom.xml
+@@ -34,6 +34,7 @@
+         <module>shenyu-plugin-httpclient</module>
+         <module>shenyu-plugin-rewrite</module>
+         <module>shenyu-plugin-waf</module>
++        <module>shenyu-plugin-header-blacklist</module>
+         <module>shenyu-plugin-global</module>
+         <module>shenyu-plugin-context-path</module>
+         <module>shenyu-plugin-redirect</module>
+diff --git a/shenyu-spring-boot-starter/shenyu-spring-boot-starter-plugin/pom.xml b/shenyu-spring-boot-starter/shenyu-spring-boot-starter-plugin/pom.xml
+index 03f59e049..83032dd76 100644
+--- a/shenyu-spring-boot-starter/shenyu-spring-boot-starter-plugin/pom.xml
++++ b/shenyu-spring-boot-starter/shenyu-spring-boot-starter-plugin/pom.xml
+@@ -34,6 +34,7 @@
+         <module>shenyu-spring-boot-starter-plugin-ratelimiter</module>
+         <module>shenyu-spring-boot-starter-plugin-sign</module>
+         <module>shenyu-spring-boot-starter-plugin-waf</module>
++        <module>shenyu-spring-boot-starter-plugin-header-blacklist</module>
+         <module>shenyu-spring-boot-starter-plugin-rewrite</module>
+         <module>shenyu-spring-boot-starter-plugin-sentinel</module>
+         <module>shenyu-spring-boot-starter-plugin-sofa</module>

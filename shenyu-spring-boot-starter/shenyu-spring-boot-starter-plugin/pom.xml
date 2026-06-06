@@ -34,6 +34,7 @@
         <module>shenyu-spring-boot-starter-plugin-ratelimiter</module>
         <module>shenyu-spring-boot-starter-plugin-sign</module>
         <module>shenyu-spring-boot-starter-plugin-waf</module>
+        <module>shenyu-spring-boot-starter-plugin-header-blacklist</module>
         <module>shenyu-spring-boot-starter-plugin-rewrite</module>
         <module>shenyu-spring-boot-starter-plugin-sentinel</module>
         <module>shenyu-spring-boot-starter-plugin-sofa</module>

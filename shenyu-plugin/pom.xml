@@ -34,6 +34,7 @@
         <module>shenyu-plugin-httpclient</module>
         <module>shenyu-plugin-rewrite</module>
         <module>shenyu-plugin-waf</module>
+        <module>shenyu-plugin-header-blacklist</module>
         <module>shenyu-plugin-global</module>
         <module>shenyu-plugin-context-path</module>
         <module>shenyu-plugin-redirect</module>
