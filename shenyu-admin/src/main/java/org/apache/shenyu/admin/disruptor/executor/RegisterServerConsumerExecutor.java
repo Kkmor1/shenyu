@@ -27,6 +27,8 @@ import org.apache.shenyu.register.common.subsriber.ExecutorSubscriber;
 import org.apache.shenyu.register.common.subsriber.ExecutorTypeSubscriber;
 import org.apache.shenyu.register.common.type.DataType;
 import org.apache.shenyu.register.common.type.DataTypeParent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -42,6 +44,8 @@ import java.util.stream.Collectors;
  */
 public final class RegisterServerConsumerExecutor extends QueueConsumerExecutor<Collection<DataTypeParent>> {
     
+    private static final Logger LOG = LoggerFactory.getLogger(RegisterServerConsumerExecutor.class);
+    
     private final Map<DataType, ExecutorSubscriber<DataTypeParent>> subscribers;
     
     private RegisterServerConsumerExecutor(final Map<DataType, ExecutorTypeSubscriber<DataTypeParent>> executorSubscriberMap) {
@@ -50,14 +54,18 @@ public final class RegisterServerConsumerExecutor extends QueueConsumerExecutor<
     
     @Override
     public void run() {
-        Collection<DataTypeParent> results = getData()
-                .stream()
-                .filter(this::isValidData)
-                .collect(Collectors.toList());
-        if (CollectionUtils.isEmpty(results)) {
-            return;
+        try {
+            Collection<DataTypeParent> results = getData()
+                    .stream()
+                    .filter(this::isValidData)
+                    .collect(Collectors.toList());
+            if (CollectionUtils.isEmpty(results)) {
+                return;
+            }
+            selectExecutor(results).executor(results);
+        } catch (Exception e) {
+            LOG.error("Failed to process register event", e);
         }
-        selectExecutor(results).executor(results);
     }
     
     private boolean isValidData(final Object data) {

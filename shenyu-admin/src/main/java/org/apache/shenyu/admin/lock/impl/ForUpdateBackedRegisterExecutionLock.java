@@ -20,6 +20,8 @@ package org.apache.shenyu.admin.lock.impl;
 import org.apache.shenyu.admin.lock.RegisterExecutionLock;
 import org.apache.shenyu.admin.lock.util.RegisterTransactionUtil;
 import org.apache.shenyu.admin.mapper.PluginMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
@@ -32,6 +34,8 @@ import org.springframework.transaction.support.DefaultTransactionDefinition;
  */
 @Deprecated
 public class ForUpdateBackedRegisterExecutionLock implements RegisterExecutionLock {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ForUpdateBackedRegisterExecutionLock.class);
 
     private final PlatformTransactionManager transactionManager;
 
@@ -56,13 +60,26 @@ public class ForUpdateBackedRegisterExecutionLock implements RegisterExecutionLo
         defaultTransactionDefinition.setTimeout(lockTimeoutSeconds);
         TransactionStatus transaction = transactionManager.getTransaction(defaultTransactionDefinition);
         RegisterTransactionUtil.set(transaction);
-        pluginMapper.selectByNameForUpdate(name);
+        try {
+            pluginMapper.selectByNameForUpdate(name);
+        } catch (Exception e) {
+            RegisterTransactionUtil.remove();
+            try {
+                transactionManager.rollback(transaction);
+            } catch (Exception rollbackEx) {
+                LOGGER.error("Failed to rollback transaction after lock acquisition failure", rollbackEx);
+            }
+            throw e;
+        }
     }
 
     @Override
     public void unlock() {
         TransactionStatus transactionStatus = RegisterTransactionUtil.get();
         try {
+            if (transactionStatus == null) {
+                return;
+            }
             if (transactionStatus.isRollbackOnly()) {
                 transactionManager.rollback(transactionStatus);
                 return;

@@ -21,17 +21,28 @@ import org.apache.shenyu.admin.service.register.ShenyuClientRegisterService;
 import org.apache.shenyu.register.common.dto.ApiDocRegisterDTO;
 import org.apache.shenyu.register.common.subsriber.ExecutorTypeSubscriber;
 import org.apache.shenyu.register.common.type.DataType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The type Metadata executor subscriber.
  */
 public class ApiDocExecutorSubscriber implements ExecutorTypeSubscriber<ApiDocRegisterDTO> {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ApiDocExecutorSubscriber.class);
+
+    private static final long LOCK_TIMEOUT_SECONDS = 30L;
+
     private final Map<String, ShenyuClientRegisterService> shenyuClientRegisterService;
+
+    private final Map<String, ReentrantLock> rpcTypeLocks = new ConcurrentHashMap<>();
 
     public ApiDocExecutorSubscriber(final Map<String, ShenyuClientRegisterService> shenyuClientRegisterService) {
         this.shenyuClientRegisterService = shenyuClientRegisterService;
@@ -46,8 +57,21 @@ public class ApiDocExecutorSubscriber implements ExecutorTypeSubscriber<ApiDocRe
     public void executor(final Collection<ApiDocRegisterDTO> dataList) {
         dataList.forEach(apiDoc -> Optional.ofNullable(this.shenyuClientRegisterService.get(apiDoc.getRpcType()))
                 .ifPresent(shenyuClientRegisterService -> {
-                    synchronized (shenyuClientRegisterService) {
-                        shenyuClientRegisterService.registerApiDoc(apiDoc);
+                    ReentrantLock lock = rpcTypeLocks.computeIfAbsent(apiDoc.getRpcType(), k -> new ReentrantLock(true));
+                    try {
+                        if (lock.tryLock(LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                            try {
+                                shenyuClientRegisterService.registerApiDoc(apiDoc);
+                            } finally {
+                                lock.unlock();
+                            }
+                        } else {
+                            LOG.error("Failed to acquire register lock for rpcType: {} within {} seconds, skipping apiDoc registration",
+                                    apiDoc.getRpcType(), LOCK_TIMEOUT_SECONDS);
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        LOG.error("Interrupted while waiting for register lock on rpcType: {}", apiDoc.getRpcType(), e);
                     }
                 }));
     }

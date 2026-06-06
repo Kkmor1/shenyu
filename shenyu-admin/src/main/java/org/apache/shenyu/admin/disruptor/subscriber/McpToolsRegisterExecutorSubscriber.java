@@ -23,16 +23,27 @@ import org.apache.shenyu.common.enums.RpcTypeEnum;
 import org.apache.shenyu.register.common.dto.McpToolsRegisterDTO;
 import org.apache.shenyu.register.common.subsriber.ExecutorTypeSubscriber;
 import org.apache.shenyu.register.common.type.DataType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * the mcpTools register executor subscriber.
  */
 public class McpToolsRegisterExecutorSubscriber implements ExecutorTypeSubscriber<McpToolsRegisterDTO> {
 
+    private static final Logger LOG = LoggerFactory.getLogger(McpToolsRegisterExecutorSubscriber.class);
+
+    private static final long LOCK_TIMEOUT_SECONDS = 30L;
+
     private final Map<String, ShenyuClientRegisterService> shenyuClientRegisterService;
+
+    private final Map<String, ReentrantLock> rpcTypeLocks = new ConcurrentHashMap<>();
 
     public McpToolsRegisterExecutorSubscriber(final Map<String, ShenyuClientRegisterService> shenyuClientRegisterService) {
         this.shenyuClientRegisterService = shenyuClientRegisterService;
@@ -45,8 +56,21 @@ public class McpToolsRegisterExecutorSubscriber implements ExecutorTypeSubscribe
                 (ShenyuClientRegisterMcpServiceImpl) shenyuClientRegisterService.get(RpcTypeEnum.MCP.getName());
 
         mcpToolsRegisterDTOList.forEach(dto -> {
-            synchronized (shenyuClientRegisterService) {
-                shenyuClientRegisterMcpService.registerMcpTools(dto);
+            ReentrantLock lock = rpcTypeLocks.computeIfAbsent(RpcTypeEnum.MCP.getName(), k -> new ReentrantLock(true));
+            try {
+                if (lock.tryLock(LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    try {
+                        shenyuClientRegisterMcpService.registerMcpTools(dto);
+                    } finally {
+                        lock.unlock();
+                    }
+                } else {
+                    LOG.error("Failed to acquire register lock for rpcType: {} within {} seconds, skipping mcpTools registration",
+                            RpcTypeEnum.MCP.getName(), LOCK_TIMEOUT_SECONDS);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.error("Interrupted while waiting for register lock on rpcType: {}", RpcTypeEnum.MCP.getName(), e);
             }
         });
     }
