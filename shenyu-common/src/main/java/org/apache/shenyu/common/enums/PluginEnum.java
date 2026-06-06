@@ -295,7 +295,12 @@ public enum PluginEnum {
     /**
      * Basic-auth plugin enum.
      */
-    BASIC_AUTH(150, 0, "basicAuth");
+    BASIC_AUTH(150, 0, "basicAuth"),
+    
+    /**
+     * Header blacklist plugin enum.
+     */
+    HEADER_BLACKLIST(10, 0, "headerBlacklist");
     
     /**
      * When the application starts, the plugin is cached and we can obtained by name.
