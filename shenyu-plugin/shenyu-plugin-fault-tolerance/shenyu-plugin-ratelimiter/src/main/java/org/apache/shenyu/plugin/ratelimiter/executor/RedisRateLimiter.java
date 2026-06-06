@@ -43,6 +43,8 @@ public class RedisRateLimiter {
 
     private static final Logger LOG = LoggerFactory.getLogger(RedisRateLimiter.class);
 
+    private final LocalTokenBucketRateLimiter localRateLimiter = new LocalTokenBucketRateLimiter();
+
     /**
      * Verify using different current limiting algorithm scripts.
      *
@@ -59,12 +61,24 @@ public class RedisRateLimiter {
         RedisScript<?> script = rateLimiterAlgorithm.getScript();
         List<String> keys = rateLimiterAlgorithm.getKeys(id);
         List<String> scriptArgs = Stream.of(replenishRate, burstCapacity, Instant.now().getEpochSecond(), requestCount).map(String::valueOf).collect(Collectors.toList());
+        
         Flux<List<Long>> resultFlux = Singleton.INST.get(ReactiveRedisTemplate.class).execute(script, keys, scriptArgs);
-        return resultFlux.onErrorResume(throwable -> Flux.just(Arrays.asList(1L, -1L)))
+        
+        return resultFlux
+                .onErrorResume(throwable -> {
+                    if (limiterHandle.isFallbackToLocal()) {
+                        LOG.warn("Redis unavailable, fallback to local rate limiter. id: {}, error: {}", id, throwable.getMessage());
+                        boolean allowed = localRateLimiter.isAllowed(id, limiterHandle.getLocalRate(), limiterHandle.getLocalBurst(), requestCount);
+                        return Flux.just(Arrays.asList(allowed ? 1L : 0L, -1L));
+                    }
+                    LOG.error("Redis unavailable and fallback disabled. id: {}, error: {}", id, throwable.getMessage());
+                    return Flux.just(Arrays.asList(0L, -1L));
+                })
                 .reduce(new ArrayList<Long>(), (longs, l) -> {
                     longs.addAll(l);
                     return longs;
-                }).map(results -> {
+                })
+                .map(results -> {
                     boolean allowed = ((Number) results.get(0)).longValue() == 1L;
                     long tokensLeft = ((Number) results.get(1)).longValue();
                     return new RateLimiterResponse(allowed, tokensLeft, keys);

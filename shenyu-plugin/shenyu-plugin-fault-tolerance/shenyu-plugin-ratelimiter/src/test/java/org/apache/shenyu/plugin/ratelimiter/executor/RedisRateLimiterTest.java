@@ -164,6 +164,64 @@ public final class RedisRateLimiterTest {
     }
 
     /**
+     * redisRateLimiter.isAllowed with fallback enabled and redis unavailable test.
+     */
+    @Test
+    public void fallbackToLocalWhenRedisUnavailableTest() {
+        isAllowedPreInit(0, 0, true);
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(10.0);
+        rateLimiterHandle.setLocalBurst(100.0);
+        Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
+        StepVerifier.create(responseMono).assertNext(r -> {
+            assertEquals(-1, r.getTokensRemaining());
+            assertTrue(r.isAllowed());
+        }).verifyComplete();
+    }
+
+    /**
+     * redisRateLimiter.isAllowed with fallback disabled and redis unavailable test.
+     */
+    @Test
+    public void notFallbackWhenRedisUnavailableTest() {
+        isAllowedPreInit(0, 0, true);
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        rateLimiterHandle.setFallbackToLocal(false);
+        Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
+        StepVerifier.create(responseMono).assertNext(r -> {
+            assertEquals(-1, r.getTokensRemaining());
+            assertFalse(r.isAllowed());
+        }).verifyComplete();
+    }
+
+    /**
+     * redisRateLimiter.isAllowed test redis recovery after failure.
+     */
+    @Test
+    public void redisRecoveryTest() {
+        // First request: redis unavailable, use fallback
+        isAllowedPreInit(0, 0, true);
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(10.0);
+        rateLimiterHandle.setLocalBurst(100.0);
+        Mono<RateLimiterResponse> firstResponseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
+        StepVerifier.create(firstResponseMono).assertNext(r -> {
+            assertEquals(-1, r.getTokensRemaining());
+            assertTrue(r.isAllowed());
+        }).verifyComplete();
+
+        // Second request: redis is back
+        isAllowedPreInit(1L, 20L, false);
+        Mono<RateLimiterResponse> secondResponseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
+        StepVerifier.create(secondResponseMono).assertNext(r -> {
+            assertEquals(20L, r.getTokensRemaining());
+            assertTrue(r.isAllowed());
+        }).verifyComplete();
+    }
+
+    /**
      * redisRateLimiter.isAllowed test pre init.
      *
      * @param allowedNum         mock lua allowedNum result
