@@ -22,7 +22,29 @@ on:
       - master
 
 jobs:
+  check-spring-boot-version:
+    name: check-spring-boot-version
+    runs-on: ubuntu-latest
+    if: (github.repository == 'apache/shenyu')
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check Spring Boot version consistency
+        run: |
+          ROOT_VERSION=$(sed -n 's/.*<spring-boot\.version>\(.*\)<\/spring-boot\.version>.*/\1/p' pom.xml | tr -d ' \t\r')
+          EXAMPLES_VERSION=$(sed -n '/<parent>/,/<\/parent>/ s/.*<version>\(.*\)<\/version>.*/\1/p' shenyu-examples/pom.xml | head -n 1 | tr -d ' \t\r')
+          echo "Root Spring Boot version: $ROOT_VERSION"
+          echo "Examples Spring Boot parent version: $EXAMPLES_VERSION"
+          if [ -z "$ROOT_VERSION" ] || [ -z "$EXAMPLES_VERSION" ]; then
+            echo "::error::Failed to extract Spring Boot versions!"
+            exit 1
+          fi
+          if [ "$ROOT_VERSION" != "$EXAMPLES_VERSION" ]; then
+            echo "::error::Spring Boot version mismatch! Root pom.xml: $ROOT_VERSION, shenyu-examples/pom.xml: $EXAMPLES_VERSION"
+            exit 1
+          fi
+
   build:
+    needs: check-spring-boot-version
     strategy:
       matrix:
         java: [17]
