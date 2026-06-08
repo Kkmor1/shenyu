@@ -22,7 +22,65 @@ on:
       - master
 
 jobs:
+  check-examples-spring-boot-version:
+    name: check-examples-spring-boot-version
+    if: (github.repository == 'apache/shenyu')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Check shenyu-examples Spring Boot parent version
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          import sys
+          import xml.etree.ElementTree as ET
+
+          namespace = {"m": "http://maven.apache.org/POM/4.0.0"}
+          expected_version = ET.parse("pom.xml").getroot().findtext("./m:properties/m:spring-boot.version", namespaces=namespace)
+
+          if not expected_version:
+              print("Failed to read spring-boot.version from pom.xml")
+              sys.exit(1)
+
+          checked_versions = []
+          mismatches = []
+          for pom_path in sorted(Path("shenyu-examples").rglob("pom.xml")):
+              pom_root = ET.parse(pom_path).getroot()
+              parent = pom_root.find("./m:parent", namespace)
+              if parent is None:
+                  continue
+
+              parent_group = parent.findtext("m:groupId", namespaces=namespace)
+              parent_artifact = parent.findtext("m:artifactId", namespaces=namespace)
+              parent_version = parent.findtext("m:version", namespaces=namespace)
+              if parent_group == "org.springframework.boot" and parent_artifact == "spring-boot-starter-parent":
+                  checked_versions.append((pom_path.as_posix(), parent_version or "<missing>"))
+                  if parent_version != expected_version:
+                      mismatches.append((pom_path.as_posix(), parent_version or "<missing>"))
+
+          if not checked_versions:
+              print("No Spring Boot parent declarations were found under shenyu-examples")
+              sys.exit(1)
+
+          print(f"Root pom spring-boot.version: {expected_version}")
+          for pom_path, parent_version in checked_versions:
+              print(f"Checked {pom_path}: parent version={parent_version}")
+
+          if mismatches:
+              print("Version mismatch detected between root pom.xml and shenyu-examples parent version(s):")
+              for pom_path, parent_version in mismatches:
+                  print(f" - {pom_path}: parent version={parent_version}, root spring-boot.version={expected_version}")
+              sys.exit(1)
+
+          print("shenyu-examples Spring Boot parent version matches root pom.xml")
+          PY
+
   build:
+    needs:
+      - check-examples-spring-boot-version
     strategy:
       matrix:
         java: [17]
@@ -164,9 +222,11 @@ jobs:
     name: build
     if: (github.repository == 'apache/shenyu') && always()
     needs:
+      - check-examples-spring-boot-version
       - build
     runs-on: ubuntu-latest
     steps:
       - name: checking job status
         run: |
+          [[ "${{ needs.check-examples-spring-boot-version.result }}" == "success" ]] || exit -1
           [[ "${{ needs.build.result }}" == "success" ]] || exit -1
