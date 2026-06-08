@@ -22,6 +22,31 @@ on:
       - master
 
 jobs:
+  check-spring-boot-version:
+    name: check-spring-boot-version
+    if: (github.repository == 'apache/shenyu')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Check Spring Boot Version Consistency
+        run: |
+          ROOT_VERSION=$(grep -oP '(?<=<spring-boot.version>)[^<]+' pom.xml)
+          EXAMPLES_VERSION=$(grep -oP '(?<=<artifactId>spring-boot-starter-parent</artifactId>\s*<version>)[^<]+' shenyu-examples/pom.xml || grep -A1 'spring-boot-starter-parent' shenyu-examples/pom.xml | grep -oP '(?<=<version>)[^<]+')
+          
+          echo "Root pom.xml spring-boot.version: ${ROOT_VERSION}"
+          echo "shenyu-examples/pom.xml Spring Boot parent version: ${EXAMPLES_VERSION}"
+          
+          if [ "${ROOT_VERSION}" != "${EXAMPLES_VERSION}" ]; then
+            echo "::error::Spring Boot version mismatch! Root pom.xml uses ${ROOT_VERSION}, but shenyu-examples/pom.xml uses ${EXAMPLES_VERSION}"
+            echo "Please update shenyu-examples/pom.xml to use Spring Boot version ${ROOT_VERSION}"
+            exit 1
+          else
+            echo "Spring Boot versions are consistent: ${ROOT_VERSION}"
+          fi
+
   build:
     strategy:
       matrix:
@@ -40,6 +65,8 @@ jobs:
             os: ubuntu-latest
     runs-on: ${{ matrix.os }}
     if: (github.repository == 'apache/shenyu')
+    needs:
+      - check-spring-boot-version
     steps:
       - name: Support longpaths
         if: ${{ matrix.os == 'windows-latest'}}
@@ -164,9 +191,11 @@ jobs:
     name: build
     if: (github.repository == 'apache/shenyu') && always()
     needs:
+      - check-spring-boot-version
       - build
     runs-on: ubuntu-latest
     steps:
       - name: checking job status
         run: |
+          [[ "${{ needs.check-spring-boot-version.result }}" == "success" ]] || exit -1
           [[ "${{ needs.build.result }}" == "success" ]] || exit -1
