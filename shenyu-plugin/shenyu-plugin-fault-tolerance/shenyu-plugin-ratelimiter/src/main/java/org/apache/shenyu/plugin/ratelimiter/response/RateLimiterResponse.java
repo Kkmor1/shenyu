@@ -33,6 +33,8 @@ public class RateLimiterResponse implements Serializable {
 
     private final List<String> keys;
 
+    private final boolean local;
+
     /**
      * Instantiates a new Rate limiter response.
      *
@@ -41,9 +43,22 @@ public class RateLimiterResponse implements Serializable {
      * @param keys the redis keys
      */
     public RateLimiterResponse(final boolean allowed, final long tokensRemaining, final List<String> keys) {
+        this(allowed, tokensRemaining, keys, false);
+    }
+
+    /**
+     * Instantiates a new Rate limiter response.
+     *
+     * @param allowed         the allowed
+     * @param tokensRemaining the tokens remaining
+     * @param keys the redis keys
+     * @param local is local fallback mode
+     */
+    public RateLimiterResponse(final boolean allowed, final long tokensRemaining, final List<String> keys, final boolean local) {
         this.allowed = allowed;
         this.tokensRemaining = tokensRemaining;
         this.keys = keys;
+        this.local = local;
     }
 
     /**
@@ -64,7 +79,6 @@ public class RateLimiterResponse implements Serializable {
         return tokensRemaining;
     }
 
-
     /**
      * get redis keys.
      *
@@ -74,8 +88,17 @@ public class RateLimiterResponse implements Serializable {
         return keys;
     }
 
+    /**
+     * is local fallback mode.
+     *
+     * @return local boolean
+     */
+    public boolean isLocal() {
+        return local;
+    }
+
     @Override
     public String toString() {
-        return "Response{" + "allowed=" + allowed + ", tokensRemaining=" + tokensRemaining + '}';
+        return "Response{" + "allowed=" + allowed + ", tokensRemaining=" + tokensRemaining + ", local=" + local + '}';
     }
 }

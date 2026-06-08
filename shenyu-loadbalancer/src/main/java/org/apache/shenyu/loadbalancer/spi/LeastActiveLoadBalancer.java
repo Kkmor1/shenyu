@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
  * least active algorithm impl.
  */
 @Join
-public class LeastActiveLoadBalance extends AbstractLoadBalancer {
+public class LeastActiveLoadBalancer extends AbstractLoadBalancer {
 
     private final Map<String, Long> countMap = new ConcurrentHashMap<>();
 

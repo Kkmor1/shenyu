@@ -76,6 +76,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertThat(r.getTokensRemaining(), is(10L));
             assertTrue(r.isAllowed());
+            assertFalse(r.isLocal());
         }).verifyComplete();
     }
 
@@ -90,6 +91,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertThat(r.getTokensRemaining(), is((long) DEFAULT_TEST_BURST_CAPACITY));
             assertFalse(r.isAllowed());
+            assertFalse(r.isLocal());
         }).verifyComplete();
     }
 
@@ -104,6 +106,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertThat(r.getTokensRemaining(), is((long) DEFAULT_TEST_BURST_CAPACITY - 100L));
             assertTrue(r.isAllowed());
+            assertFalse(r.isLocal());
         }).verifyComplete();
     }
 
@@ -118,6 +121,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertThat(r.getTokensRemaining(), is((long) DEFAULT_TEST_BURST_CAPACITY - 300L));
             assertFalse(r.isAllowed());
+            assertFalse(r.isLocal());
         }).verifyComplete();
     }
 
@@ -132,6 +136,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertEquals(1L, r.getTokensRemaining());
             assertTrue(r.isAllowed());
+            assertFalse(r.isLocal());
         }).verifyComplete();
     }
 
@@ -146,6 +151,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertEquals(0, r.getTokensRemaining());
             assertFalse(r.isAllowed());
+            assertFalse(r.isLocal());
         }).verifyComplete();
     }
 
@@ -160,6 +166,74 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertEquals(-1, r.getTokensRemaining());
             assertTrue(r.isAllowed());
+            assertFalse(r.isLocal());
+        }).verifyComplete();
+    }
+
+    /**
+     * redis 正常时仍使用分布式限流。
+     */
+    @Test
+    public void redisAvailableUsesDistributedModeTest() {
+        isAllowedPreInit(1L, 5L, false);
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(0);
+        rateLimiterHandle.setLocalBurst(1);
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
+            assertTrue(r.isAllowed());
+            assertEquals(5L, r.getTokensRemaining());
+            assertFalse(r.isLocal());
+        }).verifyComplete();
+    }
+
+    /**
+     * redis 异常时切换到本地令牌桶限流。
+     */
+    @Test
+    public void redisExceptionFallsBackToLocalModeTest() {
+        ReactiveRedisTemplate reactiveRedisTemplate = mock(ReactiveRedisTemplate.class);
+        Singleton.INST.single(ReactiveRedisTemplate.class, reactiveRedisTemplate);
+        when(reactiveRedisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
+                .thenReturn(Flux.error(new IllegalStateException("redis down")));
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(0);
+        rateLimiterHandle.setLocalBurst(1);
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
+            assertTrue(r.isAllowed());
+            assertEquals(0L, r.getTokensRemaining());
+            assertTrue(r.isLocal());
+        }).verifyComplete();
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
+            assertFalse(r.isAllowed());
+            assertEquals(0L, r.getTokensRemaining());
+            assertTrue(r.isLocal());
+        }).verifyComplete();
+    }
+
+    /**
+     * redis 恢复后切回分布式限流。
+     */
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public void redisRecoveredSwitchesBackToDistributedModeTest() {
+        ReactiveRedisTemplate reactiveRedisTemplate = mock(ReactiveRedisTemplate.class);
+        Singleton.INST.single(ReactiveRedisTemplate.class, reactiveRedisTemplate);
+        when(reactiveRedisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
+                .thenReturn(Flux.error(new IllegalStateException("redis down")), Flux.just(Lists.newArrayList(1L, 9L)));
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(0);
+        rateLimiterHandle.setLocalBurst(1);
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
+            assertTrue(r.isAllowed());
+            assertTrue(r.isLocal());
+        }).verifyComplete();
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
+            assertTrue(r.isAllowed());
+            assertEquals(9L, r.getTokensRemaining());
+            assertFalse(r.isLocal());
         }).verifyComplete();
     }
 
@@ -176,7 +250,7 @@ public final class RedisRateLimiterTest {
         Singleton.INST.single(ReactiveRedisTemplate.class, reactiveRedisTemplate);
         if (needThrowException) {
             when(reactiveRedisTemplate.execute(any(RedisScript.class), anyList(), anyList())).thenReturn(
-                    Flux.error(Throwable::new));
+                    Flux.error(new IllegalStateException("redis error")));
         } else {
             when(reactiveRedisTemplate.execute(any(RedisScript.class), anyList(), anyList())).thenReturn(
                     Flux.just(Lists.newArrayList(allowedNum, newTokens)));

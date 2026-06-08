@@ -41,7 +41,7 @@ public final class LoadBalancerFactory {
      * @return the upstream
      */
     public static Upstream selector(final List<Upstream> upstreamList, final String algorithm, final LoadBalanceData data) {
-        LoadBalancer loadBalance = ExtensionLoader.getExtensionLoader(LoadBalancer.class).getJoin(algorithm);
-        return loadBalance.select(upstreamList, data);
+        LoadBalancer loadBalancer = ExtensionLoader.getExtensionLoader(LoadBalancer.class).getJoin(algorithm);
+        return loadBalancer.select(upstreamList, data);
     }
 }

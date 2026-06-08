@@ -91,6 +91,18 @@ public final class RateLimiterPluginTest {
     }
 
     /**
+     * rateLimiterPlugin doExecute , local limiter allowed case.
+     */
+    @Test
+    public void doExecuteAllowedWithLocalFallbackTest() {
+        doExecutePreInit();
+        when(redisRateLimiter.isAllowed(anyString(), any(RateLimiterHandle.class))).thenReturn(
+                Mono.just(new RateLimiterResponse(true, 0, null, true)));
+        Mono<Void> result = rateLimiterPlugin.doExecute(exchange, chain, selectorData, ruleData);
+        StepVerifier.create(result).expectSubscription().verifyComplete();
+    }
+
+    /**
      * rateLimiterPlugin doExecute , limiter not allowed case.
      */
     @Test
@@ -136,6 +148,7 @@ public final class RateLimiterPluginTest {
      */
     private RateLimiterHandle mockRateLimiterHandler() {
         RateLimiterHandle rateLimiterHandle = new RateLimiterHandle();
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
         rateLimiterHandle.setReplenishRate(1);
         rateLimiterHandle.setBurstCapacity(100);
         rateLimiterHandle.setKeyResolverName("WHOLE_KEY_RESOLVER");

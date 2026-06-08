@@ -17,8 +17,6 @@
 
 package org.apache.shenyu.plugin.ratelimiter.executor;
 
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.apache.shenyu.common.dto.convert.rule.RateLimiterHandle;
 import org.apache.shenyu.common.utils.Singleton;
 import org.apache.shenyu.plugin.ratelimiter.algorithm.RateLimiterAlgorithm;
@@ -33,8 +31,11 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * RedisRateLimiter.
@@ -42,6 +43,18 @@ import java.util.List;
 public class RedisRateLimiter {
 
     private static final Logger LOG = LoggerFactory.getLogger(RedisRateLimiter.class);
+
+    private final LocalTokenBucketRateLimiter localTokenBucketRateLimiter;
+
+    private final AtomicBoolean localFallbackActive = new AtomicBoolean(false);
+
+    public RedisRateLimiter() {
+        this(new LocalTokenBucketRateLimiter());
+    }
+
+    RedisRateLimiter(final LocalTokenBucketRateLimiter localTokenBucketRateLimiter) {
+        this.localTokenBucketRateLimiter = localTokenBucketRateLimiter;
+    }
 
     /**
      * Verify using different current limiting algorithm scripts.
@@ -58,22 +71,47 @@ public class RedisRateLimiter {
         RateLimiterAlgorithm<?> rateLimiterAlgorithm = RateLimiterAlgorithmFactory.newInstance(limiterHandle.getAlgorithmName());
         RedisScript<?> script = rateLimiterAlgorithm.getScript();
         List<String> keys = rateLimiterAlgorithm.getKeys(id);
-        List<String> scriptArgs = Stream.of(replenishRate, burstCapacity, Instant.now().getEpochSecond(), requestCount).map(String::valueOf).collect(Collectors.toList());
-        Flux<List<Long>> resultFlux = Singleton.INST.get(ReactiveRedisTemplate.class).execute(script, keys, scriptArgs);
-        return resultFlux.onErrorResume(throwable -> Flux.just(Arrays.asList(1L, -1L)))
-                .reduce(new ArrayList<Long>(), (longs, l) -> {
-                    longs.addAll(l);
-                    return longs;
-                }).map(results -> {
-                    boolean allowed = ((Number) results.get(0)).longValue() == 1L;
-                    long tokensLeft = ((Number) results.get(1)).longValue();
-                    return new RateLimiterResponse(allowed, tokensLeft, keys);
-                })
-                .doOnError(throwable -> {
-                    rateLimiterAlgorithm.callback(rateLimiterAlgorithm.getScript(), keys, scriptArgs);
-                    LOG.error("Error occurred while judging if user is allowed by RedisRateLimiter:{}", throwable.getMessage());
-                });
+        List<String> scriptArgs = Stream.of(replenishRate, burstCapacity, Instant.now().getEpochSecond(), requestCount)
+                .map(String::valueOf)
+                .collect(Collectors.toList());
+        ReactiveRedisTemplate<String, String> reactiveRedisTemplate = Singleton.INST.get(ReactiveRedisTemplate.class);
+        if (Objects.isNull(reactiveRedisTemplate)) {
+            return handleRedisError(id, limiterHandle, rateLimiterAlgorithm, script, keys, scriptArgs,
+                    new IllegalStateException("ReactiveRedisTemplate is not initialized"));
+        }
+        Flux<List<Long>> resultFlux = reactiveRedisTemplate.execute(script, keys, scriptArgs);
+        return resultFlux.reduce(new ArrayList<Long>(), (longs, l) -> {
+            longs.addAll(l);
+            return longs;
+        }).map(results -> {
+            recoverDistributedModeIfNecessary();
+            boolean allowed = ((Number) results.get(0)).longValue() == 1L;
+            long tokensLeft = ((Number) results.get(1)).longValue();
+            return new RateLimiterResponse(allowed, tokensLeft, keys);
+        }).onErrorResume(throwable -> handleRedisError(id, limiterHandle, rateLimiterAlgorithm, script, keys, scriptArgs, throwable));
     }
 
-}
+    private Mono<RateLimiterResponse> handleRedisError(final String id, final RateLimiterHandle limiterHandle,
+                                                       final RateLimiterAlgorithm<?> rateLimiterAlgorithm, final RedisScript<?> script,
+                                                       final List<String> keys, final List<String> scriptArgs, final Throwable throwable) {
+        rateLimiterAlgorithm.callback(script, keys, scriptArgs);
+        LOG.error("Error occurred while judging if user is allowed by RedisRateLimiter:{}", throwable.getMessage());
+        if (limiterHandle.isFallbackToLocal()) {
+            activateLocalFallbackIfNecessary(throwable);
+            return Mono.just(localTokenBucketRateLimiter.isAllowed(id, limiterHandle));
+        }
+        return Mono.just(new RateLimiterResponse(true, -1L, keys));
+    }
 
+    private void activateLocalFallbackIfNecessary(final Throwable throwable) {
+        if (localFallbackActive.compareAndSet(false, true)) {
+            LOG.warn("Redis is unavailable for rate limiter, switching to local token bucket mode:{}", throwable.getMessage());
+        }
+    }
+
+    private void recoverDistributedModeIfNecessary() {
+        if (localFallbackActive.compareAndSet(true, false)) {
+            LOG.info("Redis recovered for rate limiter, switching back to distributed mode");
+        }
+    }
+}
