@@ -39,6 +39,9 @@ public class RateLimiterHandleTest {
         handle.setRequestCount(2.0);
         handle.setLoged(true);
         handle.setKeyResolverName("resolverName");
+        handle.setFallbackToLocal(true);
+        handle.setLocalRate(10.0);
+        handle.setLocalBurst(100.0);
         
         assertThat(handle.getAlgorithmName(), is("algorithmName"));
         assertThat(handle.getReplenishRate(), closeTo(500, 0.1));
@@ -46,6 +49,9 @@ public class RateLimiterHandleTest {
         assertThat(handle.getRequestCount(), closeTo(2.0, 0.1));
         assertThat(handle.isLoged(), is(true));
         assertThat(handle.getKeyResolverName(), is("resolverName"));
+        assertThat(handle.isFallbackToLocal(), is(true));
+        assertThat(handle.getLocalRate(), closeTo(10.0, 0.1));
+        assertThat(handle.getLocalBurst(), closeTo(100.0, 0.1));
     }
     
     @Test

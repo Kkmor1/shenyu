@@ -150,7 +150,7 @@ public final class RedisRateLimiterTest {
     }
 
     /**
-     * redisRateLimiter.isAllowed exception case.
+     * redisRateLimiter.isAllowed exception case without fallback (original behavior).
      */
     @Test
     public void allowedThrowableTest() {
@@ -159,6 +159,53 @@ public final class RedisRateLimiterTest {
         Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
         StepVerifier.create(responseMono).assertNext(r -> {
             assertEquals(-1, r.getTokensRemaining());
+            assertTrue(r.isAllowed());
+        }).verifyComplete();
+    }
+
+    /**
+     * redisRateLimiter.isAllowed exception case with fallbackToLocal=true — local fallback limits traffic.
+     */
+    @Test
+    public void fallbackToLocalLimitsTrafficTest() {
+        isAllowedPreInit(0, 0, true);
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(10.0);
+        rateLimiterHandle.setLocalBurst(10.0);
+        for (int i = 0; i < 10; i++) {
+            Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
+            StepVerifier.create(responseMono).assertNext(r -> {
+                assertEquals(-1, r.getTokensRemaining());
+                assertTrue(r.isAllowed());
+            }).verifyComplete();
+        }
+        Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
+        StepVerifier.create(responseMono).assertNext(r -> {
+            assertEquals(-1, r.getTokensRemaining());
+            assertFalse(r.isAllowed());
+        }).verifyComplete();
+    }
+
+    /**
+     * redisRateLimiter.isAllowed: Redis recovers after fallback.
+     */
+    @Test
+    public void redisRecoveryAfterFallbackTest() {
+        isAllowedPreInit(0, 0, true);
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(10.0);
+        rateLimiterHandle.setLocalBurst(10.0);
+        Mono<RateLimiterResponse> fallbackResponse = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
+        StepVerifier.create(fallbackResponse).assertNext(r -> {
+            assertEquals(-1, r.getTokensRemaining());
+            assertTrue(r.isAllowed());
+        }).verifyComplete();
+        isAllowedPreInit(1L, 1L, false);
+        Mono<RateLimiterResponse> recoveredResponse = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
+        StepVerifier.create(recoveredResponse).assertNext(r -> {
+            assertEquals(1L, r.getTokensRemaining());
             assertTrue(r.isAllowed());
         }).verifyComplete();
     }

@@ -53,6 +53,21 @@ public class RateLimiterHandle {
      * key resolver name.
      */
     private String keyResolverName;
+
+    /**
+     * fallback to local rate limiter when Redis is unavailable.
+     */
+    private boolean fallbackToLocal = false;
+
+    /**
+     * local replenish rate (tokens per second).
+     */
+    private double localRate = 1.0;
+
+    /**
+     * local burst capacity (max tokens).
+     */
+    private double localBurst = 100.0;
     
     /**
      * New default instance rate limiter handle.
@@ -177,6 +192,60 @@ public class RateLimiterHandle {
         this.keyResolverName = keyResolverName;
     }
 
+    /**
+     * is fallbackToLocal enabled.
+     *
+     * @return fallbackToLocal fallback to local
+     */
+    public boolean isFallbackToLocal() {
+        return fallbackToLocal;
+    }
+
+    /**
+     * set fallbackToLocal enabled.
+     *
+     * @param fallbackToLocal fallbackToLocal
+     */
+    public void setFallbackToLocal(final boolean fallbackToLocal) {
+        this.fallbackToLocal = fallbackToLocal;
+    }
+
+    /**
+     * get local rate.
+     *
+     * @return localRate local rate
+     */
+    public double getLocalRate() {
+        return localRate;
+    }
+
+    /**
+     * set local rate.
+     *
+     * @param localRate local rate
+     */
+    public void setLocalRate(final double localRate) {
+        this.localRate = localRate;
+    }
+
+    /**
+     * get local burst capacity.
+     *
+     * @return localBurst local burst
+     */
+    public double getLocalBurst() {
+        return localBurst;
+    }
+
+    /**
+     * set local burst capacity.
+     *
+     * @param localBurst local burst
+     */
+    public void setLocalBurst(final double localBurst) {
+        this.localBurst = localBurst;
+    }
+
     @Override
     public boolean equals(final Object o) {
         if (this == o) {
@@ -187,13 +256,15 @@ public class RateLimiterHandle {
         }
         RateLimiterHandle that = (RateLimiterHandle) o;
         return Double.compare(that.replenishRate, replenishRate) == 0 && Double.compare(that.burstCapacity, burstCapacity) == 0
-                && Double.compare(that.requestCount, requestCount) == 0 && loged == that.loged
+                && Double.compare(that.requestCount, requestCount) == 0 && Double.compare(that.localRate, localRate) == 0
+                && Double.compare(that.localBurst, localBurst) == 0 && loged == that.loged && fallbackToLocal == that.fallbackToLocal
                 && Objects.equals(algorithmName, that.algorithmName) && Objects.equals(keyResolverName, that.keyResolverName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(algorithmName, replenishRate, burstCapacity, requestCount, loged, keyResolverName);
+        return Objects.hash(algorithmName, replenishRate, burstCapacity, requestCount, loged, keyResolverName,
+                fallbackToLocal, localRate, localBurst);
     }
 
     @Override
@@ -213,6 +284,12 @@ public class RateLimiterHandle {
                 + ", keyResolverName='"
                 + keyResolverName
                 + '\''
+                + ", fallbackToLocal="
+                + fallbackToLocal
+                + ", localRate="
+                + localRate
+                + ", localBurst="
+                + localBurst
                 + '}';
     }
 }

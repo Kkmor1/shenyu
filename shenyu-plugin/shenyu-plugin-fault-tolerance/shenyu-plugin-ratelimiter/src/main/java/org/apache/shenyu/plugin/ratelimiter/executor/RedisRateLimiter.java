@@ -43,6 +43,16 @@ public class RedisRateLimiter {
 
     private static final Logger LOG = LoggerFactory.getLogger(RedisRateLimiter.class);
 
+    private final LocalTokenBucket localTokenBucket;
+
+    public RedisRateLimiter() {
+        this.localTokenBucket = new LocalTokenBucket();
+    }
+
+    public RedisRateLimiter(final LocalTokenBucket localTokenBucket) {
+        this.localTokenBucket = localTokenBucket;
+    }
+
     /**
      * Verify using different current limiting algorithm scripts.
      *
@@ -60,7 +70,14 @@ public class RedisRateLimiter {
         List<String> keys = rateLimiterAlgorithm.getKeys(id);
         List<String> scriptArgs = Stream.of(replenishRate, burstCapacity, Instant.now().getEpochSecond(), requestCount).map(String::valueOf).collect(Collectors.toList());
         Flux<List<Long>> resultFlux = Singleton.INST.get(ReactiveRedisTemplate.class).execute(script, keys, scriptArgs);
-        return resultFlux.onErrorResume(throwable -> Flux.just(Arrays.asList(1L, -1L)))
+        return resultFlux.onErrorResume(throwable -> {
+                    LOG.warn("Redis rate limiter unavailable, fallback to local mode: {}", throwable.getMessage());
+                    if (limiterHandle.isFallbackToLocal()) {
+                        boolean localAllowed = localTokenBucket.isAllowed(id, limiterHandle.getLocalRate(), limiterHandle.getLocalBurst());
+                        return Flux.just(Arrays.asList(localAllowed ? 1L : 0L, -1L));
+                    }
+                    return Flux.just(Arrays.asList(1L, -1L));
+                })
                 .reduce(new ArrayList<Long>(), (longs, l) -> {
                     longs.addAll(l);
                     return longs;
