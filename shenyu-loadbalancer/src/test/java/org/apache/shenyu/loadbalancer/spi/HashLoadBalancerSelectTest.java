@@ -15,33 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.shenyu.loadbalancer.factory;
+package org.apache.shenyu.loadbalancer.spi;
 
 import org.apache.shenyu.loadbalancer.entity.LoadBalanceData;
 import org.apache.shenyu.loadbalancer.entity.Upstream;
-import org.apache.shenyu.loadbalancer.spi.LoadBalancer;
-import org.apache.shenyu.spi.ExtensionLoader;
+import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 /**
- * The type Load balance Factory.
+ * HashLoadBalancer select unit test.
  */
-public final class LoadBalancerFactory {
+class HashLoadBalancerSelectTest {
 
-    private LoadBalancerFactory() {
-    }
+    @Test
+    void doSelectWithSuccess() {
+        final HashLoadBalancer hashLoadBalancer = new HashLoadBalancer();
+        final List<Upstream> upstreamList = new ArrayList<>();
+        upstreamList.add(Upstream.builder().url("http://1.1.1.1/api").build());
+        upstreamList.add(Upstream.builder().url("http://2.2.2.2/api").build());
+        upstreamList.add(Upstream.builder().url("http://3.3.3.3/api").build());
 
-    /**
-     * Selector upstream.
-     *
-     * @param upstreamList the upstream list
-     * @param algorithm    the loadBalance algorithm
-     * @param data the data
-     * @return the upstream
-     */
-    public static Upstream selector(final List<Upstream> upstreamList, final String algorithm, final LoadBalanceData data) {
-        LoadBalancer loadBalancer = ExtensionLoader.getExtensionLoader(LoadBalancer.class).getJoin(algorithm);
-        return loadBalancer.select(upstreamList, data);
+        Upstream upstream = hashLoadBalancer.doSelect(upstreamList, new LoadBalanceData());
+        assertEquals(upstreamList.get(2).getUrl(), upstream.getUrl());
     }
 }

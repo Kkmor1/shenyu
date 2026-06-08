@@ -19,28 +19,126 @@ package org.apache.shenyu.loadbalancer.spi;
 
 import org.apache.shenyu.loadbalancer.entity.LoadBalanceData;
 import org.apache.shenyu.loadbalancer.entity.Upstream;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.SortedMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * HashLoadBalancer unit test.
+ * The type Hash load balancer test.
  */
-class HashLoadBalancerTest {
+public final class HashLoadBalancerTest {
 
-    @Test
-    void doSelectWithSuccess() {
-        final HashLoadBalancer hashLoadBalancer = new HashLoadBalancer();
-        final List<Upstream> upstreamList = new ArrayList<>();
-        upstreamList.add(Upstream.builder().url("http://1.1.1.1/api").build());
-        upstreamList.add(Upstream.builder().url("http://2.2.2.2/api").build());
-        upstreamList.add(Upstream.builder().url("http://3.3.3.3/api").build());
+    private Method hash;
 
-        Upstream upstream = hashLoadBalancer.doSelect(upstreamList, new LoadBalanceData());
-        assertEquals(upstreamList.get(2).getUrl(), upstream.getUrl());
+    private List<Upstream> hashLoadBalancersOrdered;
+
+    private List<Upstream> hashLoadBalancersDisordered;
+
+    private List<Upstream> hashLoadBalancersReversed;
+
+    private ConcurrentSkipListMap<Long, Upstream> treeMapOrdered;
+
+    private ConcurrentSkipListMap<Long, Upstream> treeMapDisordered;
+
+    private ConcurrentSkipListMap<Long, Upstream> treeMapReversed;
+
+    @BeforeEach
+    public void setUp() throws Exception {
+        this.hash = HashLoadBalancer.class.getDeclaredMethod("hash", String.class);
+        this.hash.setAccessible(true);
+        this.hashLoadBalancersOrdered = Stream.of(1, 2, 3)
+                .map(weight -> Upstream.builder()
+                        .url("upstream-" + weight)
+                        .build())
+                .collect(Collectors.toList());
+        this.hashLoadBalancersDisordered = Stream.of(2, 1, 3)
+                .map(weight -> Upstream.builder()
+                        .url("upstream-" + weight)
+                        .build())
+                .collect(Collectors.toList());
+        this.hashLoadBalancersReversed = Stream.of(3, 2, 1)
+                .map(weight -> Upstream.builder()
+                        .url("upstream-" + weight)
+                        .build())
+                .collect(Collectors.toList());
+        this.treeMapOrdered = new ConcurrentSkipListMap<>();
+        this.treeMapDisordered = new ConcurrentSkipListMap<>();
+        this.treeMapReversed = new ConcurrentSkipListMap<>();
+        for (Upstream address : hashLoadBalancersOrdered) {
+            for (int i = 0; i < 5; i++) {
+                String hashKey = "SHENYU-" + address.getUrl() + "-HASH-" + i;
+                Object o = hash.invoke(null, hashKey);
+                treeMapOrdered.put(Long.parseLong(o.toString()), address);
+            }
+        }
+        for (Upstream address : hashLoadBalancersReversed) {
+            for (int i = 0; i < 5; i++) {
+                String hashKey = "SHENYU-" + address.getUrl() + "-HASH-" + i;
+                Object o = hash.invoke(null, hashKey);
+                treeMapReversed.put(Long.parseLong(o.toString()), address);
+            }
+        }
+        for (Upstream address : hashLoadBalancersDisordered) {
+            for (int i = 0; i < 5; i++) {
+                String hashKey = "SHENYU-" + address.getUrl() + "-HASH-" + i;
+                Object o = hash.invoke(null, hashKey);
+                treeMapDisordered.put(Long.parseLong(o.toString()), address);
+            }
+        }
     }
 
+    /**
+     * Hash load balancer test.
+     */
+    @Test
+    public void hashLoadBalanceOrderedWeightTest() throws Exception {
+        final HashLoadBalancer hashLoadBalancer = new HashLoadBalancer();
+        Assertions.assertNull(hashLoadBalancer.select(null, new LoadBalanceData()));
+        final Upstream upstream = hashLoadBalancer.select(hashLoadBalancersOrdered, new LoadBalanceData());
+        final Long hashKey = Long.parseLong(hash.invoke(null, "127.0.0.1").toString());
+        final SortedMap<Long, Upstream> lastRing = treeMapOrdered.tailMap(hashKey);
+        final Upstream assertUp = lastRing.get(lastRing.firstKey());
+        assertEquals(assertUp.getUrl(), upstream.getUrl());
+    }
+
+    @Test
+    public void selectTest() {
+        final String ip = "SHENYU-upstream-2-HASH-100";
+        LoadBalanceData data = new LoadBalanceData();
+        data.setIp(ip);
+        final HashLoadBalancer hashLoadBalancer = new HashLoadBalancer();
+        Assertions.assertNull(hashLoadBalancer.select(null, new LoadBalanceData()));
+        final Upstream upstream = hashLoadBalancer.select(hashLoadBalancersOrdered, data);
+        assertEquals(treeMapOrdered.firstEntry().getValue().getUrl(), upstream.getUrl());
+    }
+
+    @Test
+    public void hashLoadBalanceDisorderedWeightTest() throws Exception {
+        final HashLoadBalancer hashLoadBalancer = new HashLoadBalancer();
+        final Upstream upstream = hashLoadBalancer.select(hashLoadBalancersDisordered, new LoadBalanceData());
+        final Long hashKey = Long.parseLong(hash.invoke(null, "127.0.0.1").toString());
+        final SortedMap<Long, Upstream> lastRing = treeMapDisordered.tailMap(hashKey);
+        final Upstream assertUp = lastRing.get(lastRing.firstKey());
+        assertEquals(assertUp.getUrl(), upstream.getUrl());
+
+    }
+
+    @Test
+    public void hashLoadBalanceReversedWeightTest() throws Exception {
+        final HashLoadBalancer hashLoadBalancer = new HashLoadBalancer();
+        final Upstream divideUpstream = hashLoadBalancer.select(hashLoadBalancersReversed, new LoadBalanceData());
+        final Long hashKey = Long.parseLong(hash.invoke(null, "127.0.0.1").toString());
+        final SortedMap<Long, Upstream> lastRing = treeMapReversed.tailMap(hashKey);
+        final Upstream assertUp = lastRing.get(lastRing.firstKey());
+        assertEquals(assertUp.getUrl(), divideUpstream.getUrl());
+    }
 }

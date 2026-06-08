@@ -26,9 +26,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The type least activity load balance test.
+ * The type least activity load balancer test.
  */
-public class LeastActiveLoadBalanceTest {
+public class LeastActiveLoadBalancerTest {
     private final List<Upstream> onlyOneList = new ArrayList<>();
 
     /**
@@ -48,11 +48,11 @@ public class LeastActiveLoadBalanceTest {
     }
 
     @Test
-    public void testResponseTimeBalancer() throws Exception {
+    public void testResponseTimeBalancer() {
         buildUpstreamList();
-        final LeastActiveLoadBalance leastActiveLoadBalance = new LeastActiveLoadBalance();
-        Upstream upstream = leastActiveLoadBalance.doSelect(onlyOneList, new LoadBalanceData());
-        Upstream upstream1 = leastActiveLoadBalance.doSelect(onlyOneList, new LoadBalanceData());
+        final LeastActiveLoadBalancer leastActiveLoadBalancer = new LeastActiveLoadBalancer();
+        Upstream upstream = leastActiveLoadBalancer.doSelect(onlyOneList, new LoadBalanceData());
+        Upstream upstream1 = leastActiveLoadBalancer.doSelect(onlyOneList, new LoadBalanceData());
         Assertions.assertTrue(upstream.getUrl().equals("baidu.com") && upstream1.getUrl().equals("pro.jd.com")
                 || upstream1.getUrl().equals("baidu.com") && upstream.getUrl().equals("pro.jd.com"));
     }

@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
  * least active algorithm impl.
  */
 @Join
-public class LeastActiveLoadBalance extends AbstractLoadBalancer {
+public class LeastActiveLoadBalancer extends AbstractLoadBalancer {
 
     private final Map<String, Long> countMap = new ConcurrentHashMap<>();
 
@@ -46,7 +46,6 @@ public class LeastActiveLoadBalance extends AbstractLoadBalancer {
                 .forEach(domain -> countMap.put(domain, Long.MIN_VALUE));
 
         final String domain = countMap.entrySet().stream()
-                // Ensure that the filtered domain is included in the domainMap.
                 .filter(entry -> domainMap.containsKey(entry.getKey()))
                 .min(Comparator.comparingLong(Map.Entry::getValue))
                 .map(Map.Entry::getKey)
@@ -55,5 +54,4 @@ public class LeastActiveLoadBalance extends AbstractLoadBalancer {
         countMap.computeIfPresent(domain, (key, activated) -> Optional.of(activated).orElse(Long.MIN_VALUE) + 1);
         return domainMap.get(domain);
     }
-    
 }
