@@ -35,13 +35,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * RedisRateLimiter.
- */
 public class RedisRateLimiter {
 
     private static final Logger LOG = LoggerFactory.getLogger(RedisRateLimiter.class);
+
+    private final ConcurrentHashMap<String, LocalTokenBucket> localBuckets = new ConcurrentHashMap<>();
 
     /**
      * Verify using different current limiting algorithm scripts.
@@ -60,7 +60,7 @@ public class RedisRateLimiter {
         List<String> keys = rateLimiterAlgorithm.getKeys(id);
         List<String> scriptArgs = Stream.of(replenishRate, burstCapacity, Instant.now().getEpochSecond(), requestCount).map(String::valueOf).collect(Collectors.toList());
         Flux<List<Long>> resultFlux = Singleton.INST.get(ReactiveRedisTemplate.class).execute(script, keys, scriptArgs);
-        return resultFlux.onErrorResume(throwable -> Flux.just(Arrays.asList(1L, -1L)))
+        return resultFlux
                 .reduce(new ArrayList<Long>(), (longs, l) -> {
                     longs.addAll(l);
                     return longs;
@@ -72,8 +72,28 @@ public class RedisRateLimiter {
                 .doOnError(throwable -> {
                     rateLimiterAlgorithm.callback(rateLimiterAlgorithm.getScript(), keys, scriptArgs);
                     LOG.error("Error occurred while judging if user is allowed by RedisRateLimiter:{}", throwable.getMessage());
+                })
+                .onErrorResume(throwable -> {
+                    if (limiterHandle.isFallbackToLocal()) {
+                        LOG.warn("Redis unavailable, falling back to local rate limiter for id: {}", id);
+                        return Mono.just(fallbackToLocal(id, limiterHandle));
+                    }
+                    LOG.warn("Redis unavailable and fallbackToLocal is disabled, allowing request for id: {}", id);
+                    return Mono.just(new RateLimiterResponse(true, -1L, keys));
                 });
     }
 
-}
+    private RateLimiterResponse fallbackToLocal(final String id, final RateLimiterHandle limiterHandle) {
+        double localRate = limiterHandle.getLocalRate() > 0 ? limiterHandle.getLocalRate() : limiterHandle.getReplenishRate();
+        double localBurst = limiterHandle.getLocalBurst() > 0 ? limiterHandle.getLocalBurst() : limiterHandle.getBurstCapacity();
+        LocalTokenBucket bucket = localBuckets.computeIfAbsent(id, k -> new LocalTokenBucket(localRate, localBurst));
+        long requestCount = (long) limiterHandle.getRequestCount();
+        boolean allowed = bucket.tryConsume(requestCount);
+        long tokensRemaining = bucket.getStoredTokens();
+        return new RateLimiterResponse(allowed, tokensRemaining, null);
+    }
 
+    ConcurrentHashMap<String, LocalTokenBucket> getLocalBuckets() {
+        return localBuckets;
+    }
+}

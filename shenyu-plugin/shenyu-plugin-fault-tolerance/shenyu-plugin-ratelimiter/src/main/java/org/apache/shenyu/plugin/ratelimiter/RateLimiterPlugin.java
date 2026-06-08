@@ -84,8 +84,10 @@ public class RateLimiterPlugin extends AbstractShenyuPlugin {
                         return WebFluxResultUtils.result(exchange, error);
                     }
                     return chain.execute(exchange).doFinally(signalType -> {
-                        RateLimiterAlgorithm<?> rateLimiterAlgorithm = RateLimiterAlgorithmFactory.newInstance(limiterHandle.getAlgorithmName());
-                        rateLimiterAlgorithm.callback(rateLimiterAlgorithm.getScript(), response.getKeys(), null);
+                        if (response.getKeys() != null) {
+                            RateLimiterAlgorithm<?> rateLimiterAlgorithm = RateLimiterAlgorithmFactory.newInstance(limiterHandle.getAlgorithmName());
+                            rateLimiterAlgorithm.callback(rateLimiterAlgorithm.getScript(), response.getKeys(), null);
+                        }
                     });
                 });
     }
