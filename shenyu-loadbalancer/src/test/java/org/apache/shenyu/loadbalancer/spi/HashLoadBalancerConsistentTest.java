@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * The type Hash balance test.
  */
-public final class HashLoadBalanceTest {
+public final class HashLoadBalancerConsistentTest {
 
     private Method hash;
 
