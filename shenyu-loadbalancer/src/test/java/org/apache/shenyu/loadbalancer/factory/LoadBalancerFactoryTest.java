@@ -32,15 +32,15 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The type loadBalance utils test.
+ * The type loadBalancer utils test.
  */
 public final class LoadBalancerFactoryTest {
 
     /**
-     * Load balance util test.
+     * Load balancer util test.
      */
     @Test
-    public void loadBalanceUtilsOrderedWeightTest() {
+    public void loadBalancerUtilsOrderedWeightTest() {
         List<Upstream> upstreamList =
                 Stream.of(10, 20, 70)
                         .map(weight -> Upstream.builder()
@@ -58,7 +58,7 @@ public final class LoadBalancerFactoryTest {
     }
 
     @Test
-    public void loadBalanceUtilsDisOrderedWeightTest() {
+    public void loadBalancerUtilsDisOrderedWeightTest() {
         List<Upstream> upstreamList =
                 Stream.of(70, 10, 20)
                         .map(weight -> Upstream.builder()
@@ -76,7 +76,7 @@ public final class LoadBalancerFactoryTest {
     }
 
     @Test
-    public void loadBalanceUtilsReversedWeightTest() {
+    public void loadBalancerUtilsReversedWeightTest() {
         List<Upstream> upstreamList =
                 Stream.of(70, 20, 10)
                         .map(weight -> Upstream.builder()

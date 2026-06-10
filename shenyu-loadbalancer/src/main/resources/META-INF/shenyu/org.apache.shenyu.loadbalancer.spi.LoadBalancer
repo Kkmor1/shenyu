@@ -16,6 +16,6 @@
 random=org.apache.shenyu.loadbalancer.spi.RandomLoadBalancer
 roundRobin=org.apache.shenyu.loadbalancer.spi.RoundRobinLoadBalancer
 hash=org.apache.shenyu.loadbalancer.spi.HashLoadBalancer
-leastActive=org.apache.shenyu.loadbalancer.spi.LeastActiveLoadBalance
+leastActive=org.apache.shenyu.loadbalancer.spi.LeastActiveLoadBalancer
 p2c=org.apache.shenyu.loadbalancer.spi.P2cLoadBalancer
 shortestResponse=org.apache.shenyu.loadbalancer.spi.ShortestResponseLoadBalancer
