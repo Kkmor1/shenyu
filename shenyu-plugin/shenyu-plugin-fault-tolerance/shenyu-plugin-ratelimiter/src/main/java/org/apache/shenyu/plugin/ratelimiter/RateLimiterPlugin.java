@@ -38,6 +38,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -84,8 +85,11 @@ public class RateLimiterPlugin extends AbstractShenyuPlugin {
                         return WebFluxResultUtils.result(exchange, error);
                     }
                     return chain.execute(exchange).doFinally(signalType -> {
-                        RateLimiterAlgorithm<?> rateLimiterAlgorithm = RateLimiterAlgorithmFactory.newInstance(limiterHandle.getAlgorithmName());
-                        rateLimiterAlgorithm.callback(rateLimiterAlgorithm.getScript(), response.getKeys(), null);
+                        List<String> responseKeys = response.getKeys();
+                        if (!response.isLocalFallback() && responseKeys != null && !responseKeys.isEmpty()) {
+                            RateLimiterAlgorithm<?> rateLimiterAlgorithm = RateLimiterAlgorithmFactory.newInstance(limiterHandle.getAlgorithmName());
+                            rateLimiterAlgorithm.callback(rateLimiterAlgorithm.getScript(), responseKeys, null);
+                        }
                     });
                 });
     }

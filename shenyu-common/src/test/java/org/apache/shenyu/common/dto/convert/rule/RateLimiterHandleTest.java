@@ -29,7 +29,7 @@ import static org.hamcrest.core.Is.is;
  * Test case for RateLimiterHandle.
  */
 public class RateLimiterHandleTest {
-    
+
     @Test
     public void testGetterSetter() {
         RateLimiterHandle handle = new RateLimiterHandle();
@@ -39,21 +39,35 @@ public class RateLimiterHandleTest {
         handle.setRequestCount(2.0);
         handle.setLoged(true);
         handle.setKeyResolverName("resolverName");
-        
+        handle.setFallbackToLocal(true);
+        handle.setLocalRate(20);
+        handle.setLocalBurst(40);
+
         assertThat(handle.getAlgorithmName(), is("algorithmName"));
         assertThat(handle.getReplenishRate(), closeTo(500, 0.1));
         assertThat(handle.getBurstCapacity(), closeTo(1000, 0.1));
         assertThat(handle.getRequestCount(), closeTo(2.0, 0.1));
         assertThat(handle.isLoged(), is(true));
         assertThat(handle.getKeyResolverName(), is("resolverName"));
+        assertThat(handle.isFallbackToLocal(), is(true));
+        assertThat(handle.getLocalRate(), closeTo(20, 0.1));
+        assertThat(handle.getLocalBurst(), closeTo(40, 0.1));
     }
-    
+
     @Test
     public void testEqualsAndHashCode() {
         RateLimiterHandle handle1 = new RateLimiterHandle();
         RateLimiterHandle handle2 = new RateLimiterHandle();
-        
+
         assertThat(ImmutableSet.of(handle1, handle2), hasSize(1));
     }
-    
+
+    @Test
+    public void testNewDefaultInstance() {
+        RateLimiterHandle handle = RateLimiterHandle.newDefaultInstance();
+
+        assertThat(handle.isFallbackToLocal(), is(false));
+        assertThat(handle.getLocalRate(), closeTo(1.0, 0.1));
+        assertThat(handle.getLocalBurst(), closeTo(100.0, 0.1));
+    }
 }

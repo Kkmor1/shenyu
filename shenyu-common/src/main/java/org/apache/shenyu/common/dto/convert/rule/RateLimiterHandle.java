@@ -53,7 +53,22 @@ public class RateLimiterHandle {
      * key resolver name.
      */
     private String keyResolverName;
-    
+
+    /**
+     * fallback to local.
+     */
+    private boolean fallbackToLocal;
+
+    /**
+     * local rate.
+     */
+    private double localRate = 1.0;
+
+    /**
+     * local burst.
+     */
+    private double localBurst = 100.0;
+
     /**
      * New default instance rate limiter handle.
      *
@@ -66,9 +81,12 @@ public class RateLimiterHandle {
         rateLimiterHandle.setBurstCapacity(100.0);
         rateLimiterHandle.setRequestCount(1.0);
         rateLimiterHandle.setLoged(false);
+        rateLimiterHandle.setFallbackToLocal(false);
+        rateLimiterHandle.setLocalRate(1.0);
+        rateLimiterHandle.setLocalBurst(100.0);
         return rateLimiterHandle;
     }
-    
+
     /**
      * get algorithmName.
      *
@@ -77,7 +95,7 @@ public class RateLimiterHandle {
     public String getAlgorithmName() {
         return algorithmName;
     }
-    
+
     /**
      * set algorithmName.
      *
@@ -86,7 +104,7 @@ public class RateLimiterHandle {
     public void setAlgorithmName(final String algorithmName) {
         this.algorithmName = algorithmName;
     }
-    
+
     /**
      * get replenishRate.
      *
@@ -95,7 +113,7 @@ public class RateLimiterHandle {
     public double getReplenishRate() {
         return replenishRate;
     }
-    
+
     /**
      * set replenishRate.
      *
@@ -104,7 +122,7 @@ public class RateLimiterHandle {
     public void setReplenishRate(final double replenishRate) {
         this.replenishRate = replenishRate;
     }
-    
+
     /**
      * get burstCapacity.
      *
@@ -113,7 +131,7 @@ public class RateLimiterHandle {
     public double getBurstCapacity() {
         return burstCapacity;
     }
-    
+
     /**
      * set burstCapacity.
      *
@@ -122,7 +140,7 @@ public class RateLimiterHandle {
     public void setBurstCapacity(final double burstCapacity) {
         this.burstCapacity = burstCapacity;
     }
-    
+
     /**
      * get requestCount.
      *
@@ -131,7 +149,7 @@ public class RateLimiterHandle {
     public double getRequestCount() {
         return requestCount;
     }
-    
+
     /**
      * set requestCount.
      *
@@ -140,7 +158,7 @@ public class RateLimiterHandle {
     public void setRequestCount(final double requestCount) {
         this.requestCount = requestCount;
     }
-    
+
     /**
      * get loged.
      *
@@ -149,7 +167,7 @@ public class RateLimiterHandle {
     public boolean isLoged() {
         return loged;
     }
-    
+
     /**
      * set loged.
      *
@@ -158,7 +176,7 @@ public class RateLimiterHandle {
     public void setLoged(final boolean loged) {
         this.loged = loged;
     }
-    
+
     /**
      * get keyResolverName.
      *
@@ -167,7 +185,7 @@ public class RateLimiterHandle {
     public String getKeyResolverName() {
         return keyResolverName;
     }
-    
+
     /**
      * set keyResolverName.
      *
@@ -175,6 +193,60 @@ public class RateLimiterHandle {
      */
     public void setKeyResolverName(final String keyResolverName) {
         this.keyResolverName = keyResolverName;
+    }
+
+    /**
+     * is fallback to local.
+     *
+     * @return fallback to local
+     */
+    public boolean isFallbackToLocal() {
+        return fallbackToLocal;
+    }
+
+    /**
+     * set fallback to local.
+     *
+     * @param fallbackToLocal fallback to local
+     */
+    public void setFallbackToLocal(final boolean fallbackToLocal) {
+        this.fallbackToLocal = fallbackToLocal;
+    }
+
+    /**
+     * get localRate.
+     *
+     * @return localRate local replenish rate
+     */
+    public double getLocalRate() {
+        return localRate;
+    }
+
+    /**
+     * set localRate.
+     *
+     * @param localRate localRate
+     */
+    public void setLocalRate(final double localRate) {
+        this.localRate = localRate;
+    }
+
+    /**
+     * get localBurst.
+     *
+     * @return localBurst local burst capacity
+     */
+    public double getLocalBurst() {
+        return localBurst;
+    }
+
+    /**
+     * set localBurst.
+     *
+     * @param localBurst localBurst
+     */
+    public void setLocalBurst(final double localBurst) {
+        this.localBurst = localBurst;
     }
 
     @Override
@@ -186,14 +258,21 @@ public class RateLimiterHandle {
             return false;
         }
         RateLimiterHandle that = (RateLimiterHandle) o;
-        return Double.compare(that.replenishRate, replenishRate) == 0 && Double.compare(that.burstCapacity, burstCapacity) == 0
-                && Double.compare(that.requestCount, requestCount) == 0 && loged == that.loged
-                && Objects.equals(algorithmName, that.algorithmName) && Objects.equals(keyResolverName, that.keyResolverName);
+        return Double.compare(that.replenishRate, replenishRate) == 0
+                && Double.compare(that.burstCapacity, burstCapacity) == 0
+                && Double.compare(that.requestCount, requestCount) == 0
+                && loged == that.loged
+                && fallbackToLocal == that.fallbackToLocal
+                && Double.compare(that.localRate, localRate) == 0
+                && Double.compare(that.localBurst, localBurst) == 0
+                && Objects.equals(algorithmName, that.algorithmName)
+                && Objects.equals(keyResolverName, that.keyResolverName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(algorithmName, replenishRate, burstCapacity, requestCount, loged, keyResolverName);
+        return Objects.hash(algorithmName, replenishRate, burstCapacity, requestCount, loged, keyResolverName,
+                fallbackToLocal, localRate, localBurst);
     }
 
     @Override
@@ -213,6 +292,12 @@ public class RateLimiterHandle {
                 + ", keyResolverName='"
                 + keyResolverName
                 + '\''
+                + ", fallbackToLocal="
+                + fallbackToLocal
+                + ", localRate="
+                + localRate
+                + ", localBurst="
+                + localBurst
                 + '}';
     }
 }

@@ -31,6 +31,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +64,7 @@ public final class RedisRateLimiterTest {
     public void setUp() {
         this.redisRateLimiter = new RedisRateLimiter();
         rateLimiterHandle = new RateLimiterHandle();
+        rateLimiterHandle.setAlgorithmName("tokenBucket");
         rateLimiterHandle.setReplenishRate(DEFAULT_TEST_REPLENISH_RATE);
         rateLimiterHandle.setBurstCapacity(DEFAULT_TEST_BURST_CAPACITY);
     }
@@ -76,6 +80,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertThat(r.getTokensRemaining(), is(10L));
             assertTrue(r.isAllowed());
+            assertFalse(r.isLocalFallback());
         }).verifyComplete();
     }
 
@@ -90,6 +95,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertThat(r.getTokensRemaining(), is((long) DEFAULT_TEST_BURST_CAPACITY));
             assertFalse(r.isAllowed());
+            assertFalse(r.isLocalFallback());
         }).verifyComplete();
     }
 
@@ -104,6 +110,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertThat(r.getTokensRemaining(), is((long) DEFAULT_TEST_BURST_CAPACITY - 100L));
             assertTrue(r.isAllowed());
+            assertFalse(r.isLocalFallback());
         }).verifyComplete();
     }
 
@@ -118,6 +125,7 @@ public final class RedisRateLimiterTest {
         StepVerifier.create(responseMono).assertNext(r -> {
             assertThat(r.getTokensRemaining(), is((long) DEFAULT_TEST_BURST_CAPACITY - 300L));
             assertFalse(r.isAllowed());
+            assertFalse(r.isLocalFallback());
         }).verifyComplete();
     }
 
@@ -126,12 +134,12 @@ public final class RedisRateLimiterTest {
      */
     @Test
     public void allowedTest() {
-        isAllowedPreInit(1L, 1L, false);
-        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        isAllowedPreInit(Flux.just(Lists.newArrayList(1L, 1L)));
         Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
         StepVerifier.create(responseMono).assertNext(r -> {
             assertEquals(1L, r.getTokensRemaining());
             assertTrue(r.isAllowed());
+            assertFalse(r.isLocalFallback());
         }).verifyComplete();
     }
 
@@ -140,47 +148,89 @@ public final class RedisRateLimiterTest {
      */
     @Test
     public void notAllowedTest() {
-        isAllowedPreInit(0L, 0L, false);
-        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        isAllowedPreInit(Flux.just(Lists.newArrayList(0L, 0L)));
         Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
         StepVerifier.create(responseMono).assertNext(r -> {
             assertEquals(0, r.getTokensRemaining());
             assertFalse(r.isAllowed());
+            assertFalse(r.isLocalFallback());
         }).verifyComplete();
     }
 
     /**
-     * redisRateLimiter.isAllowed exception case.
+     * redisRateLimiter.isAllowed exception case without local fallback.
      */
     @Test
     public void allowedThrowableTest() {
-        isAllowedPreInit(0, 0, true);
-        rateLimiterHandle.setAlgorithmName("tokenBucket");
+        isAllowedPreInit(Flux.error(new RuntimeException("redis unavailable")));
         Mono<RateLimiterResponse> responseMono = redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle);
-        StepVerifier.create(responseMono).assertNext(r -> {
-            assertEquals(-1, r.getTokensRemaining());
+        StepVerifier.create(responseMono).verifyError(RuntimeException.class);
+    }
+
+    /**
+     * redisRateLimiter falls back to local mode when redis unavailable.
+     */
+    @Test
+    public void fallbackToLocalWhenRedisUnavailableTest() {
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(0);
+        rateLimiterHandle.setLocalBurst(1);
+        isAllowedPreInit(Flux.error(new RuntimeException("redis unavailable")));
+
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
             assertTrue(r.isAllowed());
+            assertEquals(0L, r.getTokensRemaining());
+            assertTrue(r.isLocalFallback());
+        }).verifyComplete();
+
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
+            assertFalse(r.isAllowed());
+            assertEquals(0L, r.getTokensRemaining());
+            assertTrue(r.isLocalFallback());
+        }).verifyComplete();
+    }
+
+    /**
+     * redisRateLimiter switches back to distributed mode after redis recovery.
+     */
+    @Test
+    public void redisRecoverySwitchBackToDistributedTest() {
+        rateLimiterHandle.setFallbackToLocal(true);
+        rateLimiterHandle.setLocalRate(0);
+        rateLimiterHandle.setLocalBurst(1);
+        isAllowedPreInit(
+                Flux.error(new RuntimeException("redis unavailable")),
+                Flux.just(Lists.newArrayList(1L, 5L))
+        );
+
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
+            assertTrue(r.isAllowed());
+            assertEquals(0L, r.getTokensRemaining());
+            assertTrue(r.isLocalFallback());
+        }).verifyComplete();
+
+        StepVerifier.create(redisRateLimiter.isAllowed(DEFAULT_TEST_ID, rateLimiterHandle)).assertNext(r -> {
+            assertTrue(r.isAllowed());
+            assertEquals(5L, r.getTokensRemaining());
+            assertFalse(r.isLocalFallback());
         }).verifyComplete();
     }
 
     /**
      * redisRateLimiter.isAllowed test pre init.
      *
-     * @param allowedNum         mock lua allowedNum result
-     * @param newTokens          mock lua newTokens result
-     * @param needThrowException mock lua throw exception
+     * @param fluxes mock lua result flux
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private void isAllowedPreInit(final long allowedNum, final long newTokens, final boolean needThrowException) {
+    private void isAllowedPreInit(final Flux<List<Long>>... fluxes) {
         ReactiveRedisTemplate reactiveRedisTemplate = mock(ReactiveRedisTemplate.class);
         Singleton.INST.single(ReactiveRedisTemplate.class, reactiveRedisTemplate);
-        if (needThrowException) {
-            when(reactiveRedisTemplate.execute(any(RedisScript.class), anyList(), anyList())).thenReturn(
-                    Flux.error(Throwable::new));
-        } else {
-            when(reactiveRedisTemplate.execute(any(RedisScript.class), anyList(), anyList())).thenReturn(
-                    Flux.just(Lists.newArrayList(allowedNum, newTokens)));
+        if (fluxes.length == 1) {
+            when(reactiveRedisTemplate.execute(any(RedisScript.class), anyList(), anyList())).thenReturn(fluxes[0]);
+            return;
         }
+        when(reactiveRedisTemplate.execute(any(RedisScript.class), anyList(), anyList()))
+                .thenReturn(fluxes[0], Arrays.copyOfRange(fluxes, 1, fluxes.length));
     }
 
     /**
